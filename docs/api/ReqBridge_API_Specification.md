@@ -1,10 +1,14 @@
-# ReqBridge API Endpoint + JSON 구조 초안
+# ReqBridge API 명세서
 
-- 버전: 0.2.0 / 2026-09-02
-- 작성·관리: 신형섭 / 검토: 프론트엔드 담당자, 한형준
-- 기준: ReqBridge_Backend_Collaboration_Plan.md, ReqBridge 팀 주제 제안서, Mini-project 교육 자료 및 이후 사용자 결정
-- 상태: 백엔드·ERD·enum 피드백 통합 개정본. 실제 API 구현 또는 서버 통합 검증 완료를 뜻하지 않는다.
-- 함께 제공한 `ReqBridge_OpenAPI_Draft.yaml`과 본 문서는 같은 스키마에서 생성했다. 공용 `docs/api/openapi.yaml`에 배치한다. 개인 plan은 `docs/personal/`, 이를 제외하는 규칙은 `docs/.gitignore`의 `/personal/`이다.
+- 관리 책임자: 신형섭
+- API 계약 버전: 0.3.0
+- 개정일: 2026-09-02
+- 적용 범위: P1 업무 API 16개와 P2 Preview API 2개를 사용하는 백엔드·프론트엔드의 외부 HTTP/JSON 계약
+- 검토: 프론트엔드 담당자, 한형준
+- 기준: ReqBridge 백엔드 협업 계획, ReqBridge 팀 주제 제안서, Mini-project 교육 자료 및 이후 사용자 결정
+- 상태: 공식 API 명세이자 팀 공통 구현·검증 기준. 모든 Endpoint의 구현 또는 배포가 완료되었다는 뜻은 아니다.
+
+이 Markdown은 처리 의미·업무 규칙·예시를, `docs/api/openapi.yaml`은 구조·타입·필수/null 조건을 정의하며 두 문서는 일치해야 한다. 현재 저장소에는 OpenAPI YAML이 제공되지 않아 Markdown만 공식 경로로 정리했다. YAML을 확보하면 계약을 추정하지 말고 이 명세와 차이를 검토한 뒤 함께 관리한다.
 
 ## 1. 범위와 적용 우선순위
 
@@ -22,9 +26,9 @@
 
 plan의 구체적인 7.2 절에 따라 P1에는 요구사항 수동 생성·PATCH·삭제를 공개하지 않는다. 포괄적으로 적힌 ‘기본 수정’보다 이 제한을 우선한다. `/api/health`는 기존 실제 계약을 확인한 후 별도로 기재한다. 현재 구현을 확인하지 않은 상태에서 응답을 새로 정의하거나 변경하지 않는다.
 
-### 이번 초안에서 구체화한 설계안
+### 공식 계약으로 구체화한 구현 기준
 
-아래는 회의 확정 사실이 아니라 프론트 연동을 위해 보완한 계약이다. 기존 내부 Port 서명과 7개 상태·분류 enum 값은 유지하고 DocumentSourceType(TEXT), ReviewDecision(APPROVE/REJECT)를 명시한다.
+아래는 프론트 연동을 위해 구체화한 공식 계약이다. 기존 내부 Port 서명과 상태·분류 enum 체계를 유지하고 DocumentSourceType(TEXT), ReviewDecision(APPROVE/REJECT)를 명시한다. RequirementStatus는 0.3.0에서 첨부된 개정 DBML 수정안 기준 5값으로 변경했다.
 
 1. `GET /documents/{documentId}/analyses` 추가: 새로고침 시 모든 종류의 진행 작업 및 실패 이력을 복구한다.
 2. 외부 ID는 JSON 정수이고 최대 `9,007,199,254,740,991`로 제한한다. DB/Java는 기존 BIGINT/Long을 유지한다. 이 범위를 넘어야 할 때는 외부 ID를 문자열로 바꾸는 계약 변경을 먼저 한다.
@@ -94,13 +98,13 @@ Java의 일반 length/@Size와 JavaScript length만으로 코드 포인트 제�
 | ReviewDecision | `APPROVE`, `REJECT` |
 | AnalysisKind | `DOCUMENT`, `ANSWER`, `REVISION` |
 | AnalysisStatus | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` |
-| RequirementStatus | `OPEN`, `IN_REVIEW`, `CONFIRMED` |
+| RequirementStatus | `EXTRACTED`, `AMBIGUOUS`, `CLARIFYING`, `IN_REVIEW`, `CONFIRMED` |
 | IssueStatus | `OPEN`, `RESOLVED` |
 | ClarificationStatus | `WAITING`, `ANSWERED`, `RESOLVED` |
 | RevisionStatus | `PROPOSED`, `APPROVED`, `REJECTED` |
 | AmbiguityType | `QUANTITY_MISSING`, `PERFORMANCE_MISSING`, `CONDITION_MISSING`, `ACTOR_MISSING`, `SUCCESS_CRITERIA_MISSING`, `TERM_AMBIGUOUS`, `EXCEPTION_MISSING` |
 
-`OPEN`은 확인 진행 중, `IN_REVIEW`는 제안 수정안 검토 대기, `CONFIRMED`는 담당자 승인 완료다. 작업 `COMPLETED`가 요구사항 `CONFIRMED`를 의미하지 않는다. 처음부터 명확한 요구사항도 수정안을 제안한 뒤 `IN_REVIEW`로 보낸다.
+`EXTRACTED`는 최초 분석으로 요구사항만 추출된 상태, `AMBIGUOUS`는 불명확성 문제가 열린 상태, `CLARIFYING`은 질문·답변·재판정 진행 또는 거절 후 수정안 재생성 대기 상태다. `IN_REVIEW`는 제안 수정안 검토 대기, `CONFIRMED`는 담당자 승인 완료다. 작업 `COMPLETED`가 요구사항 `CONFIRMED`를 의미하지 않는다. 처음부터 명확한 요구사항도 수정안을 제안한 뒤 `IN_REVIEW`로 보낸다.
 
 불충분한 답변의 질문은 `ANSWERED`로 남고 같은 문제에 다음 회차 `WAITING` 질문이 생긴다. 충분한 답변의 질문과 문제만 `RESOLVED`가 된다. 모든 문제 해결 시 수정안을 만들지만 자동 승인하지 않는다.
 
@@ -112,18 +116,20 @@ Java의 일반 length/@Size와 JavaScript length만으로 코드 포인트 제�
 - `DocumentSourceType`은 이번 MVP에서 `TEXT`만 사용한다. 생략·null·`FILE`·`text`·숫자·알 수 없는 값은 400이다. 파일 업로드를 실제 지원할 때 계약을 확장한다.
 - 재시도는 원본 `AnalysisKind`를 유지하고 `retryOfAnalysisId`로 연결한다. `RETRY`나 `SUCCESS`를 추가하지 않는다.
 - `ClarificationStatus.ANSWERED`는 답변 저장 상태다. 판정 대기·실패·불충분한 답변도 포함하며, 충분하다고 판정한 답변만 `RESOLVED`다. 이전 불충분한 답변 이력은 ANSWERED를 유지한다.
-- 회의록의 예시 `AMBIGUOUS`는 판정 설명이며 `RequirementStatus`의 추가 값이 아니다. DB의 출처 필드(adapter/source)는 상태 enum과 별개이며 외부 응답에 새로 추가하지 않는다.
+- DB의 출처 필드(adapter/source)는 상태 enum과 별개이며 외부 응답에 새로 추가하지 않는다.
 
 | 사건 | Requirement 상태 | contentVersion | Revision 상태 |
 | --- | --- | --- | --- |
-| 최초 추출, 확인할 문제 있음 | OPEN | 1 | 없음 |
+| 최초 추출 | EXTRACTED | 1 | 없음 |
+| 확인할 문제 분류 완료 | EXTRACTED → AMBIGUOUS | 유지 | 없음 |
+| 질문 발송·답변 대기 | CLARIFYING | 유지 | 없음 |
 | 처음부터 명확하거나 모든 문제 해결 후 제안 | IN_REVIEW | 현재 값 유지 | PROPOSED |
-| 최초 답변 등록 | OPEN | +1 | 없음 |
+| 최초 답변 등록·재판정 접수 | CLARIFYING | +1 | 없음 |
 | 최초 APPROVE | IN_REVIEW → CONFIRMED | 유지 | APPROVED |
-| 최초 REJECT | IN_REVIEW → OPEN | +1 | REJECTED |
+| 최초 REJECT | IN_REVIEW → CLARIFYING | +1 | REJECTED |
 | 동일 검토 재전송 | 현재 상태 유지 | 추가 증가 없음 | 기존 결정 유지 |
 
-OPEN은 미해결 문제가 있다는 뜻으로 한정하지 않는다. 모든 문제가 해결됐어도 수정안 거절 후 새 제안을 기다리는 동안 OPEN이다.
+모든 문제가 해결됐어도 수정안 거절 후 새 제안을 기다리는 동안 `CLARIFYING`이다. 열린 문제가 남아 다시 확인해야 하는 경우에는 `AMBIGUOUS`를 사용한다.
 
 ## 5. Endpoint별 요청·응답
 
@@ -304,7 +310,7 @@ sequenceNo 오름차순. 문서 분석 미완료라면 items=[]. 분석 실패/�
         "analysisId": 301,
         "sequenceNo": 1,
         "originalText": "시스템은 많은 사용자의 동시 상품 조회 요청에 빠르게 응답해야 한다. 부하 시험은 10분 동안 수행하며 성공 응답 비율은 99.9% 이상이어야 한다.",
-        "status": "OPEN",
+        "status": "CLARIFYING",
         "contentVersion": 1,
         "approvedRevisionId": null,
         "confirmedText": null
@@ -332,7 +338,7 @@ sequenceNo 오름차순. 문서 분석 미완료라면 items=[]. 분석 실패/�
     "analysisId": 301,
     "sequenceNo": 1,
     "originalText": "시스템은 많은 사용자의 동시 상품 조회 요청에 빠르게 응답해야 한다. 부하 시험은 10분 동안 수행하며 성공 응답 비율은 99.9% 이상이어야 한다.",
-    "status": "OPEN",
+    "status": "CLARIFYING",
     "contentVersion": 1,
     "approvedRevisionId": null,
     "confirmedText": null
@@ -533,7 +539,7 @@ PENDING/PROCESSING/COMPLETED/FAILED 모두 HTTP 200. 실패 자체는 data.error
 {
   "data": {
     "requirementId": 401,
-    "status": "OPEN",
+    "status": "CLARIFYING",
     "contentVersion": 1,
     "activeAnalysis": null,
     "issues": [
@@ -667,7 +673,7 @@ WAITING 질문에 답변을 저장하고 contentVersion을 1 증가시킨 뒤 AN
 
 `POST /api/requirements/{requirementId}/revisions` · 신형섭 · P1
 
-OPEN, 모든 문제 RESOLVED, 활성 작업/PROPOSED 수정안 없음, 거절 이력 있음일 때 접수한다. 거절 시 증가한 현재 contentVersion(예: 5)과 거절 사유·답변 이력을 서버가 조회해 반영한다. 새 Analysis와 Revision의 inputContentVersion은 5다. 같은 요청 중 활성 작업이 있으면 409. 성공하면 새 revisionNo를 만들고 IN_REVIEW로 전환한다.
+CLARIFYING, 모든 문제 RESOLVED, 활성 작업/PROPOSED 수정안 없음, 거절 이력 있음일 때 접수한다. 거절 시 증가한 현재 contentVersion(예: 5)과 거절 사유·답변 이력을 서버가 조회해 반영한다. 새 Analysis와 Revision의 inputContentVersion은 5다. 같은 요청 중 활성 작업이 있으면 409. 성공하면 새 revisionNo를 만들고 IN_REVIEW로 전환한다.
 
 요청 본문:
 
@@ -703,7 +709,7 @@ OPEN, 모든 문제 RESOLVED, 활성 작업/PROPOSED 수정안 없음, 거절 �
 
 `POST /api/revisions/{revisionId}/review` · 신형섭 · P1
 
-승인과 확정본 저장은 한 트랜잭션. OPEN 문제/활성 작업/오래된 버전/현재 제안 아님은 409. APPROVE에는 rejectionReason을 보내지 않는다. REJECT에는 사유 필수. 최초 거절은 사유 저장·OPEN 전환·contentVersion 1 증가를 같은 트랜잭션에서 수행한다. APPROVE는 버전을 유지한다. 같은 결정·동일 사유 재전송은 기존 결정 반환, 결정/사유 변경은 409. 현재 Requirement와 해당 Revision을 응답한다.
+승인과 확정본 저장은 한 트랜잭션. 미해결(OPEN) 문제/활성 작업/오래된 버전/현재 제안 아님은 409. APPROVE에는 rejectionReason을 보내지 않는다. REJECT에는 사유 필수. 최초 거절은 사유 저장·CLARIFYING 전환·contentVersion 1 증가를 같은 트랜잭션에서 수행한다. APPROVE는 버전을 유지한다. 같은 결정·동일 사유 재전송은 기존 결정 반환, 결정/사유 변경은 409. 현재 Requirement와 해당 Revision을 응답한다.
 
 요청 본문:
 
@@ -759,7 +765,7 @@ OPEN, 모든 문제 RESOLVED, 활성 작업/PROPOSED 수정안 없음, 거절 �
 }
 ```
 
-거절 성공은 동일 ReviewResult 구조로 `revision.status=REJECTED`, `requirement.status=OPEN`, `approvedRevisionId=null`, `confirmedText=null`을 반환한다. 거절 사유가 새 입력이므로 requirement.contentVersion은 5로 증가한다. 거절된 revision.inputContentVersion은 생성 당시 값 4를 유지한다. 동일 거절 재전송은 추가 증가 없이 현재 Requirement를 반환한다.
+거절 성공은 동일 ReviewResult 구조로 `revision.status=REJECTED`, `requirement.status=CLARIFYING`, `approvedRevisionId=null`, `confirmedText=null`을 반환한다. 거절 사유가 새 입력이므로 requirement.contentVersion은 5로 증가한다. 거절된 revision.inputContentVersion은 생성 당시 값 4를 유지한다. 동일 거절 재전송은 추가 증가 없이 현재 Requirement를 반환한다.
 
 거절 성공 응답 `200` 전체 예시:
 
@@ -787,7 +793,7 @@ OPEN, 모든 문제 RESOLVED, 활성 작업/PROPOSED 수정안 없음, 거절 �
       "analysisId": 301,
       "sequenceNo": 1,
       "originalText": "시스템은 많은 사용자의 동시 상품 조회 요청에 빠르게 응답해야 한다. 부하 시험은 10분 동안 수행하며 성공 응답 비율은 99.9% 이상이어야 한다.",
-      "status": "OPEN",
+      "status": "CLARIFYING",
       "contentVersion": 5,
       "approvedRevisionId": null,
       "confirmedText": null
@@ -979,7 +985,7 @@ P2 구현. 승인된 수정안과 근거 답변만 확정 목록에 포함한다
 | 이전 결정 또는 거절 사유 변경 | 409 REVISION_ALREADY_REVIEWED |
 | 모든 문제 해결·새 수정안 제안 | IN_REVIEW. PROPOSED 최대 1개 |
 | 승인 | Revision APPROVED + Requirement CONFIRMED + approvedRevisionId/confirmedText 동일 트랜잭션. contentVersion 유지 |
-| 거절 | Revision REJECTED + Requirement OPEN + 거절 사유 저장 + contentVersion 1 증가를 같은 트랜잭션으로 처리. 문제를 자동 재개방하지 않음 |
+| 거절 | Revision REJECTED + Requirement CLARIFYING + 거절 사유 저장 + contentVersion 1 증가를 같은 트랜잭션으로 처리. 문제를 자동 재개방하지 않음 |
 | 승인 없는 확정 요청·확정 후 수정 | 제공하지 않음. 일반 CRUD로 우회 금지 |
 
 현재 workflow 조회는 기본 상태와 Workflow 데이터를 같은 읽기 스냅샷으로 구성한다. 기본 상세와 workflow를 별도로 호출한 사이 값이 바뀌면 프론트는 workflow의 최신 버전으로 다시 조회하고, 서버의 409 검증을 따른다. 요청의 버전은 권한 증명이 아니다.
@@ -1047,10 +1053,10 @@ PreviewSummary는 기존 Core/Workflow Port에서 읽은 요구사항·문제·�
 | 순서 | 요청/결과 | 상태·버전 |
 | --- | --- | --- |
 | 1 | 프로젝트 1 생성, 문서 101 등록 | 분석 전 요구사항 없음 |
-| 2 | 문서 분석 301 접수 → 완료 | 요구사항 401 OPEN v1, 문제 501/502 OPEN, 질문 601/602 WAITING |
-| 3 | 질문 601에 ‘많이 접속할 것 같습니다.’, expectedVersion=1 | 작업 302, 요구사항 v2, 질문 601 ANSWERED |
-| 4 | 작업 302: insufficient | 문제 501 OPEN, 추가 질문 603 roundNo=2 WAITING, revisionIds=[] |
-| 5 | 질문 603에 ‘최대 동시 사용자 3,000명입니다.’, expectedVersion=2 | 작업 303, v3; 501/603 RESOLVED, 502 남아 Requirement OPEN |
+| 2 | 문서 분석 301 접수 → 완료 | 요구사항 401 EXTRACTED → AMBIGUOUS → CLARIFYING v1, 문제 501/502 OPEN, 질문 601/602 WAITING |
+| 3 | 질문 601에 ‘많이 접속할 것 같습니다.’, expectedVersion=1 | 작업 302, 요구사항 CLARIFYING v2, 질문 601 ANSWERED |
+| 4 | 작업 302: insufficient | 요구사항 CLARIFYING, 문제 501 OPEN, 추가 질문 603 roundNo=2 WAITING, revisionIds=[] |
+| 5 | 질문 603에 ‘최대 동시 사용자 3,000명입니다.’, expectedVersion=2 | 작업 303, CLARIFYING v3; 501/603 RESOLVED, 문제 502 OPEN |
 | 6 | 질문 602에 ‘p95 응답 시간 2초 이하입니다.’, expectedVersion=3 | 작업 304, v4; 502/602 RESOLVED, 수정안 701 PROPOSED, Requirement IN_REVIEW |
 | 7 | 수정안 701 APPROVE, expectedVersion=4 | 701 APPROVED + 401 CONFIRMED, confirmedText 복사, v4 유지 |
 | 8 | Preview 조회 | 고객 questions 없음; 개발팀 확정본 701과 근거 답변 601/603/602 |
@@ -1064,7 +1070,7 @@ PreviewSummary는 기존 Core/Workflow Port에서 읽은 요구사항·문제·�
 | 순서 | 요청 또는 결과 | 요구사항 버전 | 수정안 입력 버전 |
 | --- | --- | --- | --- |
 | 1 | 701 PROPOSED, IN_REVIEW | 4 | 701: 4 |
-| 2 | 701 REJECT, expectedContentVersion=4 | 5, OPEN | 701: 4 유지 |
+| 2 | 701 REJECT, expectedContentVersion=4 | 5, CLARIFYING | 701: 4 유지 |
 | 3 | 같은 거절 재전송(expectedContentVersion=4) | 5 유지, 새 처리 없음 | 701: 4 |
 | 4 | 재생성 expectedContentVersion=5, Analysis 307 | 5 | 작업 입력 5 |
 | 5 | 307 완료, 새 수정안 702/revisionNo=2 | 5, IN_REVIEW | 702: 5 |
@@ -1090,7 +1096,7 @@ PreviewSummary는 기존 Core/Workflow Port에서 읽은 요구사항·문제·�
 
 | 필드 | 타입 | 필수 | null | 조건·의미 |
 | --- | --- | --- | --- | --- |
-| `id` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `id` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `name` | string | 필수 | 불가 | - |
 | `description` | string | 필수 | 허용 | - |
 | `createdAt` | string | 필수 | 불가 | UTC ISO-8601, 예: 2026-09-02T06:00:00Z |
@@ -1109,8 +1115,8 @@ PreviewSummary는 기존 Core/Workflow Port에서 읽은 요구사항·문제·�
 
 | 필드 | 타입 | 필수 | null | 조건·의미 |
 | --- | --- | --- | --- | --- |
-| `id` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
-| `projectId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `id` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
+| `projectId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `title` | string | 필수 | 불가 | - |
 | `sourceType` | DocumentSourceType | 필수 | 불가 | - |
 | `createdAt` | string | 필수 | 불가 | UTC ISO-8601, 예: 2026-09-02T06:00:00Z |
@@ -1119,8 +1125,8 @@ PreviewSummary는 기존 Core/Workflow Port에서 읽은 요구사항·문제·�
 
 | 필드 | 타입 | 필수 | null | 조건·의미 |
 | --- | --- | --- | --- | --- |
-| `id` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
-| `projectId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `id` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
+| `projectId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `title` | string | 필수 | 불가 | - |
 | `sourceType` | DocumentSourceType | 필수 | 불가 | - |
 | `createdAt` | string | 필수 | 불가 | UTC ISO-8601, 예: 2026-09-02T06:00:00Z |
@@ -1130,22 +1136,22 @@ PreviewSummary는 기존 Core/Workflow Port에서 읽은 요구사항·문제·�
 
 | 필드 | 타입 | 필수 | null | 조건·의미 |
 | --- | --- | --- | --- | --- |
-| `id` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
-| `documentId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
-| `analysisId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `id` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
+| `documentId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
+| `analysisId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `sequenceNo` | integer | 필수 | 불가 | 최초 문서 분석 안의 순번 |
 | `originalText` | string | 필수 | 불가 | - |
 | `status` | RequirementStatus | 필수 | 불가 | - |
 | `contentVersion` | integer | 필수 | 불가 | 수정안 생성 당시 불변 버전. 예: v4 수정안을 거절해 요구사항이 v5가 되어도 기존 수정안은 4 유지. |
-| `approvedRevisionId` | integer | 필수 | 허용 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `approvedRevisionId` | integer | 필수 | 허용 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `confirmedText` | string | 필수 | 허용 | - |
 
 ### Issue
 
 | 필드 | 타입 | 필수 | null | 조건·의미 |
 | --- | --- | --- | --- | --- |
-| `id` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
-| `requirementId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `id` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
+| `requirementId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `type` | AmbiguityType | 필수 | 불가 | - |
 | `evidence` | string | 필수 | 불가 | 원문에서 판단한 불명확성 근거 |
 | `status` | IssueStatus | 필수 | 불가 | - |
@@ -1154,9 +1160,9 @@ PreviewSummary는 기존 Core/Workflow Port에서 읽은 요구사항·문제·�
 
 | 필드 | 타입 | 필수 | null | 조건·의미 |
 | --- | --- | --- | --- | --- |
-| `id` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
-| `requirementId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
-| `issueId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `id` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
+| `requirementId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
+| `issueId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `roundNo` | integer | 필수 | 불가 | 동일 issue 안에서 1부터 증가 |
 | `questionText` | string | 필수 | 불가 | - |
 | `answerText` | string | 필수 | 허용 | - |
@@ -1176,8 +1182,8 @@ P3 예약 구조. P1/P2 응답에서는 acceptanceCriteria=[]를 반환한다.
 
 | 필드 | 타입 | 필수 | null | 조건·의미 |
 | --- | --- | --- | --- | --- |
-| `id` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
-| `requirementId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `id` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
+| `requirementId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `revisionNo` | integer | 필수 | 불가 | 요구사항 안의 수정안 순번 |
 | `text` | string | 필수 | 불가 | - |
 | `status` | RevisionStatus | 필수 | 불가 | - |
@@ -1190,10 +1196,10 @@ P3 예약 구조. P1/P2 응답에서는 acceptanceCriteria=[]를 반환한다.
 
 | 필드 | 타입 | 필수 | null | 조건·의미 |
 | --- | --- | --- | --- | --- |
-| `issueId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `issueId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `sufficient` | boolean | 필수 | 불가 | - |
 | `reason` | string | 필수 | 불가 | 이번 답변의 충분성 판정 근거 |
-| `nextClarificationId` | integer | 필수 | 허용 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `nextClarificationId` | integer | 필수 | 허용 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 
 ### AnalysisResult
 
@@ -1220,14 +1226,14 @@ DOCUMENT의 requirementId/clarificationId/inputContentVersion은 null. ANSWER는
 
 | 필드 | 타입 | 필수 | null | 조건·의미 |
 | --- | --- | --- | --- | --- |
-| `id` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `id` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `kind` | AnalysisKind | 필수 | 불가 | - |
 | `status` | AnalysisStatus | 필수 | 불가 | - |
-| `documentId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
-| `requirementId` | integer | 필수 | 허용 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
-| `clarificationId` | integer | 필수 | 허용 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `documentId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
+| `requirementId` | integer | 필수 | 허용 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
+| `clarificationId` | integer | 필수 | 허용 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `inputContentVersion` | integer | 필수 | 허용 | 생성/접수 당시의 불변 업무 입력 버전. ANSWER는 답변 저장으로 증가한 버전, REVISION은 거절 후 현재 버전. DOCUMENT 작업은 null. |
-| `retryOfAnalysisId` | integer | 필수 | 허용 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `retryOfAnalysisId` | integer | 필수 | 허용 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `createdAt` | string | 필수 | 불가 | UTC ISO-8601, 예: 2026-09-02T06:00:00Z |
 | `startedAt` | string | 필수 | 허용 | UTC ISO-8601, 예: 2026-09-02T06:00:00Z |
 | `completedAt` | string | 필수 | 허용 | UTC ISO-8601, 예: 2026-09-02T06:00:00Z |
@@ -1238,7 +1244,7 @@ DOCUMENT의 requirementId/clarificationId/inputContentVersion은 null. ANSWER는
 
 | 필드 | 타입 | 필수 | null | 조건·의미 |
 | --- | --- | --- | --- | --- |
-| `requirementId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `requirementId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `status` | RequirementStatus | 필수 | 불가 | - |
 | `contentVersion` | integer | 필수 | 불가 | 수정안 생성 당시 불변 버전. 예: v4 수정안을 거절해 요구사항이 v5가 되어도 기존 수정안은 4 유지. |
 | `activeAnalysis` | object | 필수 | 허용 | DOCUMENT의 requirementId/clarificationId/inputContentVersion은 null. ANSWER는 모두 값이 있으며 REVISION의 clarificationId만 null. result는 COMPLETED에서만 객체; error는 FAILED에서만 객체. completedAt은 COMPLETED/FAILED에서 값이 있다. |
@@ -1261,8 +1267,8 @@ contentVersion은 현재 요구사항 버전. analysis.inputContentVersion은 �
 
 | 필드 | 타입 | 필수 | null | 조건·의미 |
 | --- | --- | --- | --- | --- |
-| `clarificationId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
-| `requirementId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `clarificationId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
+| `requirementId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `contentVersion` | integer | 필수 | 불가 | 수정안 생성 당시 불변 버전. 예: v4 수정안을 거절해 요구사항이 v5가 되어도 기존 수정안은 4 유지. |
 | `analysis` | Analysis | 필수 | 불가 | - |
 
@@ -1300,8 +1306,8 @@ contentVersion은 현재 요구사항 버전. analysis.inputContentVersion은 �
 
 | 필드 | 타입 | 필수 | null | 조건·의미 |
 | --- | --- | --- | --- | --- |
-| `id` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
-| `issueId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `id` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
+| `issueId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `type` | AmbiguityType | 필수 | 불가 | - |
 | `evidence` | string | 필수 | 불가 | - |
 | `roundNo` | integer | 필수 | 불가 | - |
@@ -1311,7 +1317,7 @@ contentVersion은 현재 요구사항 버전. analysis.inputContentVersion은 �
 
 | 필드 | 타입 | 필수 | null | 조건·의미 |
 | --- | --- | --- | --- | --- |
-| `requirementId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `requirementId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `sequenceNo` | integer | 필수 | 불가 | - |
 | `originalText` | string | 필수 | 불가 | - |
 | `contentVersion` | integer | 필수 | 불가 | 수정안 생성 당시 불변 버전. 예: v4 수정안을 거절해 요구사항이 v5가 되어도 기존 수정안은 4 유지. |
@@ -1330,9 +1336,9 @@ contentVersion은 현재 요구사항 버전. analysis.inputContentVersion은 �
 
 | 필드 | 타입 | 필수 | null | 조건·의미 |
 | --- | --- | --- | --- | --- |
-| `requirementId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `requirementId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `contentVersion` | integer | 필수 | 불가 | 수정안 생성 당시 불변 버전. 예: v4 수정안을 거절해 요구사항이 v5가 되어도 기존 수정안은 4 유지. |
-| `approvedRevisionId` | integer | 필수 | 허용 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `approvedRevisionId` | integer | 필수 | 허용 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 
 ### CustomerPreview
 
@@ -1340,7 +1346,7 @@ OPEN 문제의 WAITING 질문만 포함. requirements가 비어 있어도 분석
 
 | 필드 | 타입 | 필수 | null | 조건·의미 |
 | --- | --- | --- | --- | --- |
-| `documentId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `documentId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `documentTitle` | string | 필수 | 불가 | - |
 | `generatedAt` | string | 필수 | 불가 | UTC ISO-8601, 예: 2026-09-02T06:00:00Z |
 | `summary` | PreviewSummary | 필수 | 불가 | - |
@@ -1351,7 +1357,7 @@ OPEN 문제의 WAITING 질문만 포함. requirements가 비어 있어도 분석
 
 | 필드 | 타입 | 필수 | null | 조건·의미 |
 | --- | --- | --- | --- | --- |
-| `requirementId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `requirementId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `sequenceNo` | integer | 필수 | 불가 | - |
 | `originalText` | string | 필수 | 불가 | - |
 | `contentVersion` | integer | 필수 | 불가 | 수정안 생성 당시 불변 버전. 예: v4 수정안을 거절해 요구사항이 v5가 되어도 기존 수정안은 4 유지. |
@@ -1364,10 +1370,10 @@ issues: 해당 요구사항의 모든 Issue 이력, id 오름차순. questions: 
 
 | 필드 | 타입 | 필수 | null | 조건·의미 |
 | --- | --- | --- | --- | --- |
-| `requirementId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `requirementId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `sequenceNo` | integer | 필수 | 불가 | - |
 | `originalText` | string | 필수 | 불가 | - |
-| `status` | string | 필수 | 불가 |  OPEN, IN_REVIEW |
+| `status` | RequirementStatus | 필수 | 불가 | `EXTRACTED`, `AMBIGUOUS`, `CLARIFYING`, `IN_REVIEW` |
 | `contentVersion` | integer | 필수 | 불가 | 수정안 생성 당시 불변 버전. 예: v4 수정안을 거절해 요구사항이 v5가 되어도 기존 수정안은 4 유지. |
 | `issues` | array<Issue> | 필수 | 불가 | - |
 | `questions` | array<Clarification> | 필수 | 불가 | - |
@@ -1378,7 +1384,7 @@ confirmedRequirements에는 APPROVED 수정안만 포함. evidenceAnswers는 해
 
 | 필드 | 타입 | 필수 | null | 조건·의미 |
 | --- | --- | --- | --- | --- |
-| `documentId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 초안은 JavaScript 안전 정수 범위로 제한한다. |
+| `documentId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `documentTitle` | string | 필수 | 불가 | - |
 | `generatedAt` | string | 필수 | 불가 | UTC ISO-8601, 예: 2026-09-02T06:00:00Z |
 | `summary` | PreviewSummary | 필수 | 불가 | - |
@@ -1407,13 +1413,15 @@ confirmedRequirements에는 APPROVED 수정안만 포함. evidenceAnswers는 해
 - **한형준:** Core/Preview 외부 DTO·Controller, 공통 응답/HTTP 예외 처리, DB 스키마·Supabase 연결. Workflow 스키마는 요청 내용을 반영해 적용한다.
 - **프론트:** 반환 ID/업무 버전 사용, 비동기 상태 polling, null/빈 배열/409 처리, 최신 상세 재조회. DB용 snake_case나 내부 Port DTO에 직접 의존하지 않는다.
 
-이 문서는 기존 plan의 Endpoint/상태/소유권을 구체화한 외부 계약 초안이다. 로그인 도입, 삭제, 수동 편집, 다운로드를 구현 범위에 추가하지 않는다. 실제 기존 health 계약과 오류 구현은 저장소를 확인해 맞추며, 이번 개정의 조회/필드/재시도 저장 구조·enum·거절 버전 규칙을 공용 명세와 코드에 함께 반영한다.
+이 문서는 기존 plan의 Endpoint/상태/소유권을 구체화한 공식 외부 계약이다. 로그인 도입, 삭제, 수동 편집, 다운로드를 구현 범위에 추가하지 않는다. 실제 기존 health 계약과 오류 구현은 저장소를 확인해 맞추며, 이번 개정의 조회/필드/재시도 저장 구조·enum·거절 버전 규칙을 공용 명세와 코드에 함께 반영한다.
 
 검증 범위: OpenAPI 문법·참조·요청/응답 예시와 JSON 스키마 일치 여부를 검사한다. Spring Boot 실행·Supabase 접속·실제 HTTP 응답·업무 트랜잭션의 통합 테스트는 구현 후 별도 검증 대상이다.
 
 ## 11. 개정 내역과 검증 기준
 
-0.2.0은 0.1.0을 대체한다. 18개 Endpoint와 담당은 유지하고 다음을 반영했다.
+0.3.0은 0.2.0의 Endpoint·HTTP 메서드·JSON 구조·담당자를 유지하면서 RequirementStatus를 첨부된 개정 DBML 수정안 기준 5값으로 변경했다. `OPEN`을 제거하고 `EXTRACTED`, `AMBIGUOUS`, `CLARIFYING`을 추가했으며 관련 상태 전이와 예시를 함께 수정했다.
+
+0.2.0은 0.1.0을 대체하며 다음을 반영했다.
 
 - 거절 시 버전 증가, 거절·재생성·승인 JSON과 연속 시나리오 보정.
 - 9개 공통 enum 명시, ReviewDecision oneOf 연결, DocumentSourceType(TEXT) 연결.
@@ -1421,8 +1429,10 @@ confirmedRequirements에는 APPROVED 수정안만 포함. evidenceAnswers는 해
 - 문자열 정규화, 목록 정렬, Developer Preview 전체 이력, 개인 문서 경로 수정.
 - 검토 시각 reviewed_at·확정 시각 confirmed_at은 DB 보완 권장 항목이며 외부 Revision 응답 필드에는 이번에 추가하지 않는다.
 
-API의 구조 제약은 [OpenAPI 3.0.3 명세](https://spec.openapis.org/oas/v3.0.3.html)를 따른다. 스키마 검증과 별개로 상태 전이·소속·동시성·중복 처리는 백엔드 업무 검증이 필요하다. DB 적용은 함께 제공한 `ReqBridge_DB_Change_Request.md`, 내부 개발은 `ReqBridge_Backend_Collaboration_Plan.md`를 따른다.
+API의 구조 제약은 [OpenAPI 3.0.3 명세](https://spec.openapis.org/oas/v3.0.3.html)를 따른다. 스키마 검증과 별개로 상태 전이·소속·동시성·중복 처리는 백엔드 업무 검증이 필요하다. DB 적용 기준인 `ReqBridge_DB_Change_Request.md`는 현재 저장소에 제공되지 않았으며, 내부 개발 계획은 `ReqBridge_Backend_Collaboration_Plan.md`를 따른다.
 
-추가 DB 수정 문서의 회차 제약 교체·확정 시각·AC 순서 제안은 DB 요청 1.1에 통합했다. Preview P2·AC P3·3단계 RequirementStatus를 유지하며, 회차는 Issue별로 증가한다. 재질문 사유는 기존 Analysis.result.assessment에 저장하므로 별도 외부 필드를 추가하지 않는다.
+추가 DB 수정 문서의 회차 제약 교체·확정 시각·AC 순서 제안은 DB 요청 1.1에 통합했다. Preview P2·AC P3를 유지하며, 회차는 Issue별로 증가한다. 재질문 사유는 기존 Analysis.result.assessment에 저장하므로 별도 외부 필드를 추가하지 않는다.
 
-문서 검증 결과: 18개 Endpoint·담당자와 9개 enum을 API/plan/DB 요청에 대조했다. OpenAPI 문법·참조, YAML 예시 85개와 Endpoint의 Markdown JSON 27개를 검증했고, 검토 명령·TEXT-only·필수/미정의 필드·ID 상한의 잘못된 입력이 스키마에서 거절되는지 확인했다. 내부 Port 서명·DTO 타입은 기존 plan과 동일하다. 실제 Spring Boot·DB·HTTP 통합 테스트는 수행하지 않았다.
+과거 0.2.0 작성 당시 검증 기록: 18개 Endpoint·담당자와 9개 enum을 당시 API/plan/DB 요청에 대조했고, 당시 제공된 OpenAPI의 문법·참조, YAML 예시 85개와 Markdown JSON 27개를 검증했다. 이는 이번 0.3.0 공식화 작업에서 OpenAPI나 DB 요청을 다시 검증했다는 뜻이 아니다. 실제 Spring Boot·DB·HTTP 통합 테스트는 수행하지 않았다.
+
+0.3.0 문서 검증 결과(2026-09-02): Markdown의 JSON 코드 블록 28개를 파싱했고, 공식화 전 문서와 비교해 필드·타입 구조가 유지됐음을 확인했다. Endpoint는 P1 16개·P2 2개이며 HTTP 메서드·경로·담당자가 유지됐다. JSON의 `OPEN` 값은 IssueStatus에만 남아 있다. OpenAPI YAML과 DB 수정 요청서는 저장소에 없어 문법·참조·스키마 일치 및 `/api` 중복 여부를 검증하지 않았다. 애플리케이션·DB 테스트는 문서 작업 범위 밖이라 실행하지 않았다.

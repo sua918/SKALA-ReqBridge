@@ -67,10 +67,10 @@ Spring Boot와 Vue로 구성된 모노레포입니다. 로컬 데이터베이스
 
 ## 접속 정보
 
-| 구성 요소 | 주소 |
-| --- | --- |
-| Frontend | http://localhost:5173 |
-| Backend | http://localhost:8080 |
-| PostgreSQL | localhost:5432 |
+| 구성 요소  | 주소                  |
+| ---------- | --------------------- |
+| Frontend   | http://localhost:5173 |
+| Backend    | http://localhost:8080 |
+| PostgreSQL | localhost:5432        |
 
 백엔드 상태는 `GET http://localhost:8080/api/health`에서 확인할 수 있습니다. 프런트엔드 개발 서버의 `/api` 요청은 백엔드로 전달됩니다.
