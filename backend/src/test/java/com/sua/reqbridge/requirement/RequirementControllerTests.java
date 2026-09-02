@@ -14,6 +14,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.sua.reqbridge.contract.RequirementStatus;
+
 @WebMvcTest(RequirementController.class)
 class RequirementControllerTests {
 
@@ -31,7 +33,7 @@ class RequirementControllerTests {
 		mockMvc.perform(get("/api/documents/101/requirements"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.items[0].id").value(401))
-				.andExpect(jsonPath("$.data.items[0].status").value("OPEN"))
+				.andExpect(jsonPath("$.data.items[0].status").value("EXTRACTED"))
 				.andExpect(jsonPath("$.data.items[0].approvedRevisionId").isEmpty())
 				.andExpect(jsonPath("$.data.items[0].confirmedText").isEmpty());
 	}
@@ -43,7 +45,7 @@ class RequirementControllerTests {
 		when(requirement.getAnalysisId()).thenReturn(301L);
 		when(requirement.getSequenceNo()).thenReturn(1);
 		when(requirement.getOriginalText()).thenReturn("고객 원문");
-		when(requirement.getStatus()).thenReturn(RequirementStatus.OPEN);
+		when(requirement.getStatus()).thenReturn(RequirementStatus.EXTRACTED);
 		when(requirement.getContentVersion()).thenReturn(1L);
 		when(requirement.getApprovedRevisionId()).thenReturn(null);
 		return requirement;

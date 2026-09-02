@@ -5,7 +5,13 @@ CREATE TYPE document_source_type AS ENUM ('TEXT');
 CREATE TYPE analysis_status AS ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED');
 CREATE TYPE analysis_adapter_type AS ENUM ('MOCK', 'MANUAL', 'LLM');
 CREATE TYPE analysis_kind AS ENUM ('DOCUMENT', 'ANSWER', 'REVISION');
-CREATE TYPE requirement_status AS ENUM ('OPEN', 'IN_REVIEW', 'CONFIRMED');
+CREATE TYPE requirement_status AS ENUM (
+    'EXTRACTED',
+    'AMBIGUOUS',
+    'CLARIFYING',
+    'IN_REVIEW',
+    'CONFIRMED'
+);
 CREATE TYPE ambiguity_status AS ENUM ('OPEN', 'RESOLVED');
 CREATE TYPE ambiguity_type AS ENUM (
     'QUANTITY_MISSING',
@@ -103,7 +109,7 @@ CREATE TABLE requirement (
     analysis_id BIGINT NOT NULL,
     sequence_no INTEGER NOT NULL CHECK (sequence_no > 0),
     original_text TEXT NOT NULL,
-    status requirement_status NOT NULL DEFAULT 'OPEN',
+    status requirement_status NOT NULL DEFAULT 'EXTRACTED',
     content_version BIGINT NOT NULL DEFAULT 1 CHECK (content_version > 0),
     approved_revision_id BIGINT,
     confirmed_text TEXT,

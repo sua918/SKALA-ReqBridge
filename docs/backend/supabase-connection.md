@@ -87,10 +87,24 @@ Supabase Data API에 `app` 스키마를 노출할 필요는 없다. 현재 구�
 
 Desktop의 `ReqBridge.sql`은 collaboration plan 1.2와 일치하지 않아 현재 상태로는 실행하지 않는다. 주요 차이는 다음과 같다.
 
+RequirementStatus 5단계는 개정 DBML과 공용 계약을 기준으로 저장소 V1에도 동일하게 반영한다.
+
 - `DocumentSourceType`에 현재 미지원인 FILE 포함
-- RequirementStatus가 5단계이며 plan/API의 OPEN·IN_REVIEW·CONFIRMED와 불일치
 - Requirement의 confirmed_text 누락
 - Analysis의 재시도 입력 보존용 input_snapshot 누락
 - 답변 판정 사유를 Analysis.result.assessment 대신 Clarification 중복 컬럼에 저장
 
-Supabase에는 저장소의 `backend/src/main/resources/db/migration/V1__initial_schema.sql`을 적용해야 현재 JPA Entity와 Hibernate validation이 일치한다. 팀이 Desktop SQL을 최종본으로 확정하려면 API·plan·JPA를 함께 바꾸는 별도 계약 변경이 필요하다.
+Supabase에는 저장소의 `backend/src/main/resources/db/migration/V1__initial_schema.sql`을 적용해야 현재 JPA Entity와 Hibernate validation이 일치한다. Desktop SQL의 나머지 차이를 최종 기준으로 확정하려면 API·plan·JPA를 함께 바꾸는 별도 계약 변경이 필요하다.
+
+### 기존 3단계 스키마를 이미 적용한 경우
+
+기존 V1 SQL을 실행해 `OPEN`, `IN_REVIEW`, `CONFIRMED`가 생성된 DB에는 V1을 다시 실행하지 않는다. 애플리케이션 쓰기를 중지하고 백업한 뒤 `docs/backend/sql/upgrade_requirement_status_3_to_5.sql`을 SQL Editor에서 한 번 실행한다.
+
+스크립트는 기존 `OPEN`을 관련 데이터에 따라 다음처럼 변환한다.
+
+- 검토 중인 PROPOSED 수정안이 있으면 `IN_REVIEW`
+- 거절 수정안 또는 질문 이력이 있으면 `CLARIFYING`
+- 열린 불명확성만 있으면 `AMBIGUOUS`
+- 관련 Workflow 데이터가 없으면 `EXTRACTED`
+
+기존 `IN_REVIEW`, `CONFIRMED`는 유지한다. 실행 전 enum이 정확히 기존 3값인지 검사하며, 예상과 다르면 트랜잭션을 중단한다. 완료 후 결과 집계에서 `OPEN`이 없고 새 기본값이 `EXTRACTED`인지 확인한다.

@@ -1,6 +1,8 @@
 package com.sua.reqbridge.requirement;
 
-public class RequirementStateException extends RuntimeException {
+import com.sua.reqbridge.contract.StateConflictException;
+
+public class RequirementStateException extends StateConflictException {
 
 	public RequirementStateException(String message) {
 		super(message);

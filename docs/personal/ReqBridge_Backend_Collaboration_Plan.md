@@ -148,7 +148,7 @@ Clarification의 `requirementId`를 유지하면 연결된 AmbiguityIssue의 req
 | --- | --- | --- |
 | AnalysisKind | `DOCUMENT`, `ANSWER`, `REVISION` | 문서 추출·분석, 답변 재판정, 수정안 재생성 |
 | AnalysisStatus | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` | 작업 진행 상태 |
-| RequirementStatus | `OPEN`, `IN_REVIEW`, `CONFIRMED` | 확인 중, 검토할 수정안 있음, 담당자 확정 |
+| RequirementStatus | `EXTRACTED`, `AMBIGUOUS`, `CLARIFYING`, `IN_REVIEW`, `CONFIRMED` | 추출, 불명확성 발견, 확인 진행, 수정안 검토, 담당자 확정 |
 | IssueStatus | `OPEN`, `RESOLVED` | 추가 정보 필요 여부 |
 | ClarificationStatus | `WAITING`, `ANSWERED`, `RESOLVED` | 미답변, 답변 저장됨, 해당 답변으로 문제 해결 |
 | RevisionStatus | `PROPOSED`, `APPROVED`, `REJECTED` | 수정안 검토 상태 |
@@ -160,13 +160,13 @@ Clarification의 `requirementId`를 유지하면 연결된 AmbiguityIssue의 req
 
 1. 문서 분석을 접수하면 Analysis(PENDING)를 DB에 먼저 저장하고 202를 반환한다. 실제 처리는 커밋 이후 실행한다.
 2. Mock이 요구사항 목록·문제·질문을 반환한다. 신형섭이 결과를 검증하고 Core Port로 요구사항을 생성한 뒤 자기 소유의 문제·질문을 저장한다. 결과 전체 저장과 COMPLETED 전환은 한 트랜잭션으로 처리한다.
-3. 문제가 있으면 Requirement는 OPEN, 문제는 OPEN, 첫 질문은 WAITING이다. 처음부터 문제가 없으면 원문을 기반으로 검토 가능한 수정안을 생성하고 IN_REVIEW로 보낸다. 자동 확정하지 않는다.
+3. 요구사항 생성 직후에는 EXTRACTED다. 문제가 있으면 AMBIGUOUS를 거쳐 첫 질문을 만들고 CLARIFYING으로 전환한다. 문제는 OPEN, 첫 질문은 WAITING이다. 처음부터 문제가 없으면 원문을 기반으로 검토 가능한 수정안을 생성하고 IN_REVIEW로 보낸다. 자동 확정하지 않는다.
 4. PM이 WAITING 질문에 답하면 answer를 저장하고 ANSWERED로 바꾸며 contentVersion을 증가시킨다. 동일 트랜잭션에서 ANSWER 작업을 등록한다.
 5. 답변이 부족하면 기존 질문은 ANSWERED로 남기고, 같은 문제에 다음 round의 WAITING 질문을 만든다. 사용자 입력 없이 자동 반복하지 않는다.
-6. 충분하면 해당 문제와 그 답변을 RESOLVED로 변경한다. 과거 불충분했던 답변은 ANSWERED로 유지한다. 다른 OPEN 문제가 남으면 Requirement는 OPEN이다.
+6. 충분하면 해당 문제와 그 답변을 RESOLVED로 변경한다. 과거 불충분했던 답변은 ANSWERED로 유지한다. 다른 OPEN 문제가 남으면 AMBIGUOUS이며, 다음 질문이 발송되면 CLARIFYING이다.
 7. 모든 문제가 해결되면 해당 시점의 원문·답변 전체를 근거로 수정안을 생성하고 IN_REVIEW로 바꾼다. 수정안에는 inputContentVersion과 근거 답변 ID 목록을 보존한다. 한 요구사항에 검토 가능한 PROPOSED는 최대 하나만 유지하며 새 초안 생성으로 기존 제안이 사라지게 하지 않는다.
 8. 담당자가 제안된 수정안을 승인하면 Revision을 APPROVED로 바꾸고 Requirement의 approvedRevisionId·confirmedText·상태를 함께 반영한다.
-9. 거절하면 Revision을 REJECTED, Requirement를 OPEN으로 바꾸고 필수 거절 사유를 저장한다. 동일 수정안을 같은 결정으로 다시 검토하면 기존 결과를 반환하며, 결정 번복은 409로 제한한다. 이미 해결된 문제를 자동으로 다시 열지는 않는다. 모든 문제가 해결된 상태에서는 별도의 REVISION 작업으로 새 수정안을 요청할 수 있다. Mock도 거절 사유·회차에 따른 다음 시나리오를 제공한다.
+9. 거절하면 Revision을 REJECTED, Requirement를 CLARIFYING으로 바꾸고 필수 거절 사유를 저장한다. 동일 수정안을 같은 결정으로 다시 검토하면 기존 결과를 반환하며, 결정 번복은 409로 제한한다. 이미 해결된 문제를 자동으로 다시 열지는 않는다. 모든 문제가 해결된 상태에서는 별도의 REVISION 작업으로 새 수정안을 요청할 수 있다. Mock도 거절 사유·회차에 따른 다음 시나리오를 제공한다.
 10. CONFIRMED 이후 내용 변경·재개방은 P1 범위 밖이다. 일반 수정 API나 재분석으로 확정본을 덮어쓰지 않는다.
 
 ### 5.3 실패·중복·동시성
@@ -233,7 +233,7 @@ nullable: approvedRevisionId, confirmedText, approvedRevision은 미확정 시 n
 - createRequirements의 반환 결과는 sequenceNo로 입력과 대응한다. 한형준은 이 메서드에서 분석이나 질문을 생성하지 않는다.
 - lock 메서드는 호출자의 트랜잭션 안에서 동작하고 잠금을 반환 시 해제하지 않는다. REQUIRED 트랜잭션을 사용한다. REQUIRES_NEW로 확정본만 먼저 커밋하지 않는다.
 - advanceContentVersion은 예상 버전 일치 여부를 확인하고 1 증가한 버전을 반환한다. 형섭의 답변 저장과 같은 트랜잭션에 참여한다.
-- changeStatus는 OPEN↔IN_REVIEW만 허용한다. CONFIRMED는 confirmRequirement만 사용할 수 있다.
+- changeStatus는 CONFIRMED를 제외한 업무 상태 전이를 수행한다. CONFIRMED는 confirmRequirement만 사용할 수 있다.
 - confirmRequirement는 Core Entity를 변경하는 메서드다. revision의 유효성·문제 해결 여부 검증은 신형섭의 승인 Service가 먼저 수행한다. 외부 API에서 직접 노출하지 않는다.
 - Port 예외는 공용 `ResourceNotFoundException`, `StateConflictException`으로 한정한다. 소유권은 신형섭, HTTP 매핑은 한형준이다. 구체적인 코드·메시지는 전체 API 명세에 기록한다.
 - Report는 기본 데이터와 Workflow 조회를 하나의 읽기 전용 REPEATABLE_READ 트랜잭션으로 읽는다. approvedRevisionId 불일치가 발견되면 오류 처리하고 다른 버전의 본문을 혼합하지 않는다.

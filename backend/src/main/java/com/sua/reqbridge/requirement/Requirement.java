@@ -6,6 +6,8 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import com.sua.reqbridge.contract.RequirementStatus;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -69,7 +71,7 @@ public class Requirement {
 		this.analysisId = analysisId;
 		this.sequenceNo = sequenceNo;
 		this.originalText = originalText;
-		this.status = RequirementStatus.OPEN;
+		this.status = RequirementStatus.EXTRACTED;
 		this.contentVersion = 1;
 	}
 
@@ -82,7 +84,7 @@ public class Requirement {
 	public void changeStatus(long expectedContentVersion, RequirementStatus targetStatus) {
 		verifyContentVersion(expectedContentVersion);
 		if (targetStatus == null || targetStatus == RequirementStatus.CONFIRMED) {
-			throw new RequirementStateException("Only OPEN and IN_REVIEW are valid workflow status targets");
+			throw new RequirementStateException("CONFIRMED requires an approved revision");
 		}
 		if (status == RequirementStatus.CONFIRMED) {
 			throw new RequirementStateException("A confirmed requirement cannot be reopened in MVP");

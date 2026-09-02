@@ -18,10 +18,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
-import com.sua.reqbridge.document.DocumentNotFoundException;
-import com.sua.reqbridge.project.ProjectNotFoundException;
-import com.sua.reqbridge.requirement.RequirementNotFoundException;
-import com.sua.reqbridge.requirement.RequirementStateException;
+import com.sua.reqbridge.contract.ResourceNotFoundException;
+import com.sua.reqbridge.contract.StateConflictException;
 
 import jakarta.validation.ConstraintViolationException;
 
@@ -30,17 +28,13 @@ public class GlobalApiExceptionHandler {
 
 	private static final Logger log = LoggerFactory.getLogger(GlobalApiExceptionHandler.class);
 
-	@ExceptionHandler({
-			ProjectNotFoundException.class,
-			DocumentNotFoundException.class,
-			RequirementNotFoundException.class
-	})
-	public ResponseEntity<ApiErrorResponse> handleNotFound(RuntimeException exception) {
+	@ExceptionHandler(ResourceNotFoundException.class)
+	public ResponseEntity<ApiErrorResponse> handleNotFound(ResourceNotFoundException exception) {
 		return error(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", exception.getMessage(), List.of());
 	}
 
-	@ExceptionHandler(RequirementStateException.class)
-	public ResponseEntity<ApiErrorResponse> handleStateConflict(RequirementStateException exception) {
+	@ExceptionHandler(StateConflictException.class)
+	public ResponseEntity<ApiErrorResponse> handleStateConflict(StateConflictException exception) {
 		return error(HttpStatus.CONFLICT, "STATE_CONFLICT", exception.getMessage(), List.of());
 	}
 

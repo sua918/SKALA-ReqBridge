@@ -42,7 +42,7 @@ Hibernate/JPA는 prepared statement를 사용하므로 Supavisor transaction poo
 - TEXT Document 생성·단건·프로젝트별 목록·비관적 잠금
 - Requirement 일괄 생성·단건·문서별 목록·비관적 잠금
 - `contentVersion` 예상값 검증과 증가
-- `OPEN`/`IN_REVIEW` 전환 제한
+- `EXTRACTED`·`AMBIGUOUS`·`CLARIFYING`·`IN_REVIEW` 상태 전이와 승인 전용 `CONFIRMED`
 - 승인 revision ID와 확정 본문을 함께 보존하는 `CONFIRMED` 전환
 - 확정 요구사항 재개방 방지
 
@@ -56,15 +56,15 @@ Hibernate/JPA는 prepared statement를 사용하므로 Supavisor transaction poo
 - 요청의 미정의 필드, 잘못된 enum, 문자열·ID 범위 검증
 - 프로젝트·문서 ID 내림차순 및 요구사항 순번 오름차순 조회
 
-## 계약 대기 항목
+## 공용 계약 연결
 
-저장소에 신형섭 소유 `contract` 패키지와 `docs/api/openapi.yaml`이 아직 없다. 협업 계획의 경계를 지키기 위해 다음 항목은 추정 구현하지 않았다.
+- `CoreRequirementPort` 구현 어댑터와 contract snapshot 매핑을 제공한다.
+- Core 리소스·상태 예외는 공용 `ResourceNotFoundException`, `StateConflictException`으로 연결한다.
+- Requirement Entity·Controller·DB는 공용 5단계 `RequirementStatus`를 동일하게 사용한다.
+- 세분화된 Workflow 오류 코드와 Preview Controller는 Workflow 구현 범위에서 연결한다.
+- `docs/api/openapi.yaml`은 아직 제공되지 않아 Markdown API 명세를 기준으로 한다.
 
-- `CoreRequirementPort` 구현 어댑터와 contract snapshot 매핑
-- 공용 계약의 세분화된 Workflow 예외 코드 매핑
-- Preview Controller와 `WorkflowPreviewPort` 연결
-
-계약이 반영되면 현재 서비스에 얇은 Controller/Port 어댑터를 추가하면 된다. 외부 API에서 Requirement 상태를 직접 바꾸거나 확정 상태를 우회하는 기능은 노출하지 않는다.
+외부 API에서 Requirement 상태를 직접 바꾸거나 확정 상태를 우회하는 기능은 노출하지 않는다.
 
 ## CRUD와 변경 이력 범위
 

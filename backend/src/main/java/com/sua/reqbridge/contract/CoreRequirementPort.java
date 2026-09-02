@@ -30,7 +30,7 @@ public interface CoreRequirementPort {
 	long advanceContentVersion(long requirementId, long expectedContentVersion);
 
 	/**
-	 * 일반 상태 변경인 {@code OPEN}과 {@code IN_REVIEW} 사이의 전이만 수행한다.
+	 * {@code CONFIRMED}를 제외한 업무 상태 전이를 수행한다.
 	 * 최종 확정에는 {@link #confirmRequirement(long, long, long, String)}를 사용한다.
 	 */
 	void changeStatus(

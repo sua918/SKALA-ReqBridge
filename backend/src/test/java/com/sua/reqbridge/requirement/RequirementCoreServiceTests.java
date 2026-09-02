@@ -12,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.sua.reqbridge.contract.RequirementStatus;
 import com.sua.reqbridge.document.DocumentRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -41,7 +42,7 @@ class RequirementCoreServiceTests {
 			assertThat(requirement.getDocumentId()).isEqualTo(1L);
 			assertThat(requirement.getAnalysisId()).isEqualTo(10L);
 			assertThat(requirement.getContentVersion()).isEqualTo(1L);
-			assertThat(requirement.getStatus()).isEqualTo(RequirementStatus.OPEN);
+			assertThat(requirement.getStatus()).isEqualTo(RequirementStatus.EXTRACTED);
 		});
 	}
 

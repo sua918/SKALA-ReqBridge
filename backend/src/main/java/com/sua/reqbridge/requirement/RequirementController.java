@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.sua.reqbridge.common.api.ApiResponse;
 import com.sua.reqbridge.common.api.ItemList;
+import com.sua.reqbridge.contract.RequirementStatus;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Positive;

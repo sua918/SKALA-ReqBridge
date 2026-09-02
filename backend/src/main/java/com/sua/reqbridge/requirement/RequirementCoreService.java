@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.sua.reqbridge.common.validation.TextRules;
+import com.sua.reqbridge.contract.RequirementStatus;
 import com.sua.reqbridge.document.DocumentNotFoundException;
 import com.sua.reqbridge.document.DocumentRepository;
 

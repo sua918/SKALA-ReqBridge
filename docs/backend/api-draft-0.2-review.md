@@ -1,5 +1,7 @@
 # API Endpoint + JSON 초안 0.2.0 검토
 
+> 이 기록의 3단계 RequirementStatus 판단은 API 명세 0.3.0과 개정 DBML의 5단계 계약으로 대체됐다.
+
 ## 결론
 
 P1/P2 경계, 18개 Endpoint, 응답 래퍼, TEXT-only 입력, 9개 enum, 버전·중복·재시도 흐름은 DB 요청 1.1 및 협업 계획과 대체로 일관된다. Core 담당 8개 P1 Endpoint는 현재 구현과 구조가 일치한다. 다만 아래 항목을 고친 뒤 공용 기준으로 확정하는 것이 안전하다.

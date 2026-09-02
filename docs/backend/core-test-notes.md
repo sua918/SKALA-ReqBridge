@@ -9,12 +9,14 @@ cd backend
 bash gradlew test
 ```
 
-결과: 성공, 총 28개 테스트 통과.
+결과: 성공, 총 34개 테스트 통과.
 
 - 기존 health Controller 계약
 - Project 입력 정규화·목록·필수값
 - TEXT Document 생성과 존재하지 않는 Project 거절
 - Requirement 번호 정렬·연속성 검증
+- 공용 5단계 RequirementStatus와 최초 EXTRACTED 상태
+- CoreRequirementPort Adapter의 Snapshot·상태 매핑
 - contentVersion 증가와 오래된 버전 거절
 - IN_REVIEW가 아닌 요구사항의 승인 방지
 - 확정 본문·revision ID 보존
@@ -32,6 +34,8 @@ bash gradlew test
 `git diff --check`도 통과했다.
 
 ## PostgreSQL 통합 검증
+
+아래는 초기 Core 스키마의 통합 검증 기록이다. 공용 5단계 RequirementStatus 반영 후에는 신규 빈 DB 또는 격리 스키마에서 V1 적용 검증을 다시 수행해야 한다.
 
 실행 중이던 로컬 PostgreSQL에 Flyway 자동 적용용 DB와 Supabase 수동 SQL 적용용 DB를 각각 임시 생성해 다음 항목을 검증했다. 기존 `app` 데이터베이스는 변경하지 않았고, 두 검증 DB는 완료 후 삭제했다.
 
