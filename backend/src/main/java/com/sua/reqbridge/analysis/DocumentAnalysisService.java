@@ -1,0 +1,139 @@
+package com.sua.reqbridge.analysis;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.sua.reqbridge.ambiguity.AmbiguityIssue;
+import com.sua.reqbridge.ambiguity.AmbiguityIssueRepository;
+import com.sua.reqbridge.clarification.Clarification;
+import com.sua.reqbridge.clarification.ClarificationRepository;
+import com.sua.reqbridge.contract.AnalysisKind;
+import com.sua.reqbridge.contract.AnalysisStatus;
+import com.sua.reqbridge.contract.CoreRequirementPort;
+import com.sua.reqbridge.contract.DocumentSnapshot;
+import com.sua.reqbridge.contract.RequirementSeed;
+import com.sua.reqbridge.contract.RequirementSnapshot;
+import com.sua.reqbridge.contract.RequirementStatus;
+import com.sua.reqbridge.contract.ResourceNotFoundException;
+import com.sua.reqbridge.contract.StateConflictException;
+
+import tools.jackson.databind.ObjectMapper;
+
+public class DocumentAnalysisService {
+
+	private static final List<AnalysisStatus> ACTIVE = List.of(
+			AnalysisStatus.PENDING, AnalysisStatus.PROCESSING);
+
+	private final AnalysisRepository analyses;
+	private final AmbiguityIssueRepository issues;
+	private final ClarificationRepository clarifications;
+	private final CoreRequirementPort core;
+	private final ApplicationEventPublisher events;
+	private final MockWorkflowAnalyzer analyzer;
+	private final ObjectMapper json;
+
+	public DocumentAnalysisService(AnalysisRepository analyses,
+			AmbiguityIssueRepository issues,
+			ClarificationRepository clarifications,
+			CoreRequirementPort core,
+			ApplicationEventPublisher events,
+			MockWorkflowAnalyzer analyzer,
+			ObjectMapper json) {
+		this.analyses = analyses;
+		this.issues = issues;
+		this.clarifications = clarifications;
+		this.core = core;
+		this.events = events;
+		this.analyzer = analyzer;
+		this.json = json;
+	}
+
+	@Transactional
+	public Analysis submit(long documentId) {
+		DocumentSnapshot document = core.getDocument(documentId);
+		if (analyses.existsByDocumentIdAndKindAndStatusIn(documentId, AnalysisKind.DOCUMENT, ACTIVE)) {
+			throw new StateConflictException("ANALYSIS_IN_PROGRESS", "문서 분석이 진행 중입니다.");
+		}
+		if (analyses.existsByDocumentIdAndKindAndStatus(
+				documentId, AnalysisKind.DOCUMENT, AnalysisStatus.COMPLETED)) {
+			throw new StateConflictException("DOCUMENT_ALREADY_ANALYZED", "이미 분석을 완료한 문서입니다.");
+		}
+		Analysis saved = analyses.save(Analysis.pendingDocument(documentId,
+				json.writeValueAsString(new DocumentInput(document.id(), document.sourceType(), document.content()))));
+		events.publishEvent(new DocumentAnalysisRequested(saved.getId()));
+		return saved;
+	}
+
+	@Transactional
+	public void executeDocument(long analysisId) {
+		Analysis analysis = get(analysisId);
+		analysis.start(Instant.now());
+		DocumentSnapshot document = core.getDocument(analysis.getDocumentId());
+		MockWorkflowAnalyzer.DocumentResult output = analyzer.analyze(document);
+		List<RequirementSnapshot> created = core.createRequirements(document.id(), analysisId,
+				output.requirements().stream()
+						.map(item -> new RequirementSeed(item.sequenceNo(), item.originalText()))
+						.toList());
+
+		List<Long> requirementIds = new ArrayList<>();
+		List<Long> issueIds = new ArrayList<>();
+		List<Long> clarificationIds = new ArrayList<>();
+		for (MockWorkflowAnalyzer.RequirementCandidate candidate : output.requirements()) {
+			RequirementSnapshot requirement = created.stream()
+					.filter(item -> item.sequenceNo() == candidate.sequenceNo())
+					.findFirst()
+					.orElseThrow(() -> new IllegalArgumentException("Mock 결과와 생성 요구사항이 일치하지 않습니다."));
+			requirementIds.add(requirement.id());
+			if (!candidate.issues().isEmpty()) {
+				core.changeStatus(requirement.id(), requirement.contentVersion(), RequirementStatus.AMBIGUOUS);
+			}
+			for (MockWorkflowAnalyzer.IssueCandidate candidateIssue : candidate.issues()) {
+				AmbiguityIssue issue = issues.save(AmbiguityIssue.open(
+						requirement.id(), candidateIssue.type(), candidateIssue.evidence()));
+				Clarification clarification = clarifications.save(Clarification.waiting(
+						requirement.id(), issue.getId(), 1, candidateIssue.questionText()));
+				issueIds.add(issue.getId());
+				clarificationIds.add(clarification.getId());
+			}
+			if (!candidate.issues().isEmpty()) {
+				core.changeStatus(requirement.id(), requirement.contentVersion(), RequirementStatus.CLARIFYING);
+			}
+		}
+
+		analysis.complete(json.writeValueAsString(new AnalysisResult(
+				requirementIds, issueIds, clarificationIds, List.of(), null)), Instant.now());
+	}
+
+	@Transactional
+	public void fail(long analysisId, String code, String message) {
+		get(analysisId).fail(code, message, Instant.now());
+	}
+
+	@Transactional(readOnly = true)
+	public Analysis get(long analysisId) {
+		return analyses.findById(analysisId)
+				.orElseThrow(() -> new ResourceNotFoundException("분석 작업을 찾을 수 없습니다."));
+	}
+
+	@Transactional(readOnly = true)
+	public List<Analysis> list(long documentId, AnalysisKind kind) {
+		core.getDocument(documentId);
+		return kind == null
+				? analyses.findByDocumentIdOrderByIdDesc(documentId)
+				: analyses.findByDocumentIdAndKindOrderByIdDesc(documentId, kind);
+	}
+
+	record DocumentInput(long documentId, String sourceType, String content) {
+	}
+
+	record AnalysisResult(List<Long> requirementIds, List<Long> issueIds,
+			List<Long> clarificationIds, List<Long> revisionIds, Object assessment) {
+	}
+}
+
+record DocumentAnalysisRequested(long analysisId) {
+}
