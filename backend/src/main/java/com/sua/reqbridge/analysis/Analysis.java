@@ -103,12 +103,21 @@ public class Analysis {
 		this.inputContentVersion = inputContentVersion;
 		this.inputSnapshot = Objects.requireNonNull(inputSnapshot);
 		this.adapterType = Objects.requireNonNull(adapterType);
-		this.schemaVersion = Objects.requireNonNull(schemaVersion);
+		if (schemaVersion == null || schemaVersion.isBlank() || schemaVersion.length() > 50) {
+			throw new IllegalArgumentException("schemaVersion은 1~50자여야 합니다.");
+		}
+		this.schemaVersion = schemaVersion;
 		this.createdAt = Instant.now();
 	}
 
 	public static Analysis pendingDocument(long documentId, String inputSnapshot) {
 		return new Analysis(AnalysisKind.DOCUMENT, documentId, null, null, null, inputSnapshot);
+	}
+
+	public static Analysis pendingDocument(long documentId, String inputSnapshot,
+			AnalysisAdapterType adapterType, String schemaVersion) {
+		return new Analysis(AnalysisKind.DOCUMENT, documentId, null, null, null,
+				inputSnapshot, adapterType, schemaVersion);
 	}
 
 	public static Analysis pendingAnswer(long documentId, long requirementId,
@@ -117,10 +126,22 @@ public class Analysis {
 				clarificationId, inputContentVersion, inputSnapshot);
 	}
 
+	public static Analysis pendingAnswer(long documentId, long requirementId, long clarificationId,
+			long inputContentVersion, String inputSnapshot, AnalysisAdapterType adapterType, String schemaVersion) {
+		return new Analysis(AnalysisKind.ANSWER, documentId, requirementId, clarificationId,
+				inputContentVersion, inputSnapshot, adapterType, schemaVersion);
+	}
+
 	public static Analysis pendingRevision(long documentId, long requirementId,
 			long inputContentVersion, String inputSnapshot) {
 		return new Analysis(AnalysisKind.REVISION, documentId, requirementId,
 				null, inputContentVersion, inputSnapshot);
+	}
+
+	public static Analysis pendingRevision(long documentId, long requirementId, long inputContentVersion,
+			String inputSnapshot, AnalysisAdapterType adapterType, String schemaVersion) {
+		return new Analysis(AnalysisKind.REVISION, documentId, requirementId, null,
+				inputContentVersion, inputSnapshot, adapterType, schemaVersion);
 	}
 
 	public static Analysis retry(Analysis failedAnalysis) {

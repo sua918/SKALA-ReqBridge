@@ -200,6 +200,8 @@ class AnswerWorkflowServiceTests {
 				revisions, core, events, new MockWorkflowAnalyzer(), new ObjectMapper());
 		AnswerWorkflowService.AnswerReceipt receipt = service.submit(601, "많이 접속할 것 같습니다.", 1);
 		when(analyses.findById(302L)).thenReturn(Optional.of(receipt.analysis()));
+		when(core.lockRequirement(401L)).thenReturn(new RequirementSnapshot(
+				401, 101, 301, 1, "원문", RequirementStatus.CLARIFYING, 2, null, null));
 
 		service.executeAnswer(302);
 
@@ -221,7 +223,10 @@ class AnswerWorkflowServiceTests {
 		Clarification clarification = Clarification.waiting(401, 502, 1, "질문");
 		ReflectionTestUtils.setField(clarification, "id", 602L);
 		clarification.answer("p95 응답 시간 2초 이하입니다.");
-		Analysis analysis = Analysis.pendingAnswer(101, 401, 602, 4, "{}");
+		Analysis analysis = Analysis.pendingAnswer(101, 401, 602, 4, new ObjectMapper().writeValueAsString(
+				new AnswerWorkflowService.AnswerInput(602, 502, clarification.getAnswerText(), 4)));
+		when(core.lockRequirement(401L)).thenReturn(new RequirementSnapshot(
+				401, 101, 301, 1, "원문", RequirementStatus.CLARIFYING, 4, null, null));
 		ReflectionTestUtils.setField(analysis, "id", 304L);
 
 		when(analyses.findById(304L)).thenReturn(Optional.of(analysis));
@@ -262,7 +267,10 @@ class AnswerWorkflowServiceTests {
 		Clarification clarification = Clarification.waiting(401, 501, 1, "질문");
 		ReflectionTestUtils.setField(clarification, "id", 601L);
 		clarification.answer("최대 동시 사용자 3,000명입니다.");
-		Analysis analysis = Analysis.pendingAnswer(101, 401, 601, 2, "{}");
+		Analysis analysis = Analysis.pendingAnswer(101, 401, 601, 2, new ObjectMapper().writeValueAsString(
+				new AnswerWorkflowService.AnswerInput(601, 501, clarification.getAnswerText(), 2)));
+		when(core.lockRequirement(401L)).thenReturn(new RequirementSnapshot(
+				401, 101, 301, 1, "원문", RequirementStatus.CLARIFYING, 2, null, null));
 		ReflectionTestUtils.setField(analysis, "id", 302L);
 
 		when(analyses.findById(302L)).thenReturn(Optional.of(analysis));

@@ -20,6 +20,10 @@ import com.sua.reqbridge.contract.RequirementSnapshot;
 import com.sua.reqbridge.contract.RequirementStatus;
 import com.sua.reqbridge.contract.ResourceNotFoundException;
 import com.sua.reqbridge.contract.StateConflictException;
+import com.sua.reqbridge.contract.ai.WorkflowAnalyzer;
+import com.sua.reqbridge.contract.ai.AnalyzerTypes.DocumentResult;
+import com.sua.reqbridge.contract.ai.AnalyzerTypes.RequirementCandidate;
+import com.sua.reqbridge.contract.ai.AnalyzerTypes.IssueCandidate;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -36,7 +40,7 @@ public class DocumentAnalysisService {
 	private final ClarificationRepository clarifications;
 	private final CoreRequirementPort core;
 	private final ApplicationEventPublisher events;
-	private final MockWorkflowAnalyzer analyzer;
+	private final WorkflowAnalyzer analyzer;
 	private final ObjectMapper json;
 
 	public DocumentAnalysisService(AnalysisRepository analyses,
@@ -44,7 +48,7 @@ public class DocumentAnalysisService {
 			ClarificationRepository clarifications,
 			CoreRequirementPort core,
 			ApplicationEventPublisher events,
-			MockWorkflowAnalyzer analyzer,
+			WorkflowAnalyzer analyzer,
 			ObjectMapper json) {
 		this.analyses = analyses;
 		this.issues = issues;
@@ -66,7 +70,8 @@ public class DocumentAnalysisService {
 			throw new StateConflictException("DOCUMENT_ALREADY_ANALYZED", "이미 분석을 완료한 문서입니다.");
 		}
 		Analysis saved = analyses.save(Analysis.pendingDocument(documentId,
-				json.writeValueAsString(new DocumentInput(document.id(), document.sourceType(), document.content()))));
+				json.writeValueAsString(new DocumentInput(document.id(), document.sourceType(), document.content())),
+				analyzer.adapterType(), analyzer.schemaVersion()));
 		events.publishEvent(new DocumentAnalysisRequested(saved.getId()));
 		return saved;
 	}
@@ -74,9 +79,15 @@ public class DocumentAnalysisService {
 	@Transactional
 	public void executeDocument(long analysisId) {
 		Analysis analysis = get(analysisId);
+		AnalyzerOutputValidator.requireMatchingAdapter(analysis, analyzer);
 		analysis.start(Instant.now());
 		DocumentSnapshot document = core.getDocument(analysis.getDocumentId());
-		MockWorkflowAnalyzer.DocumentResult output = analyzer.analyze(document);
+		DocumentInput input = json.readValue(analysis.getInputSnapshot(), DocumentInput.class);
+		if (input.documentId() != document.id()) {
+			throw new IllegalStateException("분석 입력의 문서 ID가 일치하지 않습니다.");
+		}
+		DocumentResult output = AnalyzerOutputValidator.document(analyzer.analyze(new DocumentSnapshot(
+				document.id(), document.projectId(), document.title(), input.content(), input.sourceType())));
 		List<RequirementSnapshot> created = core.createRequirements(document.id(), analysisId,
 				output.requirements().stream()
 						.map(item -> new RequirementSeed(item.sequenceNo(), item.originalText()))
@@ -85,16 +96,16 @@ public class DocumentAnalysisService {
 		List<Long> requirementIds = new ArrayList<>();
 		List<Long> issueIds = new ArrayList<>();
 		List<Long> clarificationIds = new ArrayList<>();
-		for (MockWorkflowAnalyzer.RequirementCandidate candidate : output.requirements()) {
+		for (RequirementCandidate candidate : output.requirements()) {
 			RequirementSnapshot requirement = created.stream()
 					.filter(item -> item.sequenceNo() == candidate.sequenceNo())
 					.findFirst()
-					.orElseThrow(() -> new AiOutputInvalidException("Mock 결과와 생성 요구사항이 일치하지 않습니다."));
+					.orElseThrow(() -> new AiOutputInvalidException("분석 결과와 생성 요구사항이 일치하지 않습니다."));
 			requirementIds.add(requirement.id());
 			if (!candidate.issues().isEmpty()) {
 				core.changeStatus(requirement.id(), requirement.contentVersion(), RequirementStatus.AMBIGUOUS);
 			}
-			for (MockWorkflowAnalyzer.IssueCandidate candidateIssue : candidate.issues()) {
+			for (IssueCandidate candidateIssue : candidate.issues()) {
 				AmbiguityIssue issue = issues.save(AmbiguityIssue.open(
 						requirement.id(), candidateIssue.type(), candidateIssue.evidence()));
 				Clarification clarification = clarifications.save(Clarification.waiting(

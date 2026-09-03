@@ -4,13 +4,40 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
 import com.sua.reqbridge.contract.AnalysisKind;
 import com.sua.reqbridge.contract.AnalysisStatus;
+import com.sua.reqbridge.contract.AnalysisAdapterType;
 
 class AnalysisTests {
+
+	@Test
+	void allKindsKeepExplicitAdapterAndSchemaAcrossRetry() {
+		for (Analysis analysis : List.of(
+				Analysis.pendingDocument(101, "{}", AnalysisAdapterType.LLM, "2.1"),
+				Analysis.pendingAnswer(101, 401, 601, 2, "{}", AnalysisAdapterType.LLM, "2.1"),
+				Analysis.pendingRevision(101, 401, 5, "{}", AnalysisAdapterType.LLM, "2.1"))) {
+			analysis.fail("AI_OUTPUT_INVALID", "실패", Instant.now());
+			Analysis retry = Analysis.retry(analysis);
+			assertThat(retry.getAdapterType()).isEqualTo(AnalysisAdapterType.LLM);
+			assertThat(retry.getSchemaVersion()).isEqualTo("2.1");
+			assertThat(retry.getKind()).isEqualTo(analysis.getKind());
+			assertThat(retry.getInputSnapshot()).isEqualTo(analysis.getInputSnapshot());
+		}
+	}
+
+	@Test
+	void rejectsInvalidAdapterMetadataBeforePersistence() {
+		assertThatThrownBy(() -> Analysis.pendingDocument(101, "{}", null, "1.0.0"))
+				.isInstanceOf(NullPointerException.class);
+		for (String schema : List.of("", " ", "a".repeat(51))) {
+			assertThatThrownBy(() -> Analysis.pendingDocument(101, "{}", AnalysisAdapterType.LLM, schema))
+					.isInstanceOf(IllegalArgumentException.class);
+		}
+	}
 
 	@Test
 	void completesAnAnswerAnalysisWithItsImmutableInput() {
