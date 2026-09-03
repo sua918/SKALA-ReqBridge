@@ -55,18 +55,44 @@ const customerEmptyNote = computed(() => {
 /** basis는 조회 시점의 버전 스냅샷이다. 어느 버전을 보고 있는지 화면에 남긴다 (Spec 6.4). */
 const basis = computed(() => preview.value?.basis ?? [])
 
+/**
+ * 늦게 도착한 응답을 버리기 위한 세대 번호.
+ *
+ * 두 탭은 서로 다른 endpoint라 응답 모양도 다르다. 탭을 빠르게 바꿨을 때
+ * 먼저 보낸 고객용 응답이 나중에 도착하면, 개발팀 탭에 고객용 데이터가 들어앉는다.
+ * 그 상태에서 템플릿이 `confirmedRequirements.length`를 읽으면 화면이 깨진다.
+ * 요청할 때 세대를 올려 두고, 돌아왔을 때 세대가 바뀌었으면 결과를 버린다.
+ */
+let loadGeneration = 0
+
 async function load() {
+  const generation = ++loadGeneration
+  const wantsCustomer = isCustomer.value
+
   loading.value = true
   clearError()
+  //다른 탭의 데이터를 잠시라도 현재 탭 모양으로 그리지 않는다.
+  preview.value = null
+
   try {
-    preview.value = isCustomer.value
+    const next = wantsCustomer
       ? await getCustomerPreview(documentId.value)
       : await getDeveloperPreview(documentId.value)
+    if (generation !== loadGeneration) {
+      return
+    }
+    preview.value = next
   } catch (error) {
+    if (generation !== loadGeneration) {
+      return
+    }
     preview.value = null
     captureError(error)
   } finally {
-    loading.value = false
+    //뒤늦은 응답이 로딩 표시를 끄면, 아직 오지 않은 최신 요청이 끝난 것처럼 보인다.
+    if (generation === loadGeneration) {
+      loading.value = false
+    }
   }
 }
 

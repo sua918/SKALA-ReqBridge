@@ -13,7 +13,7 @@
  */
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { retryAnalysis } from '@/api/analyses'
+import { listDocumentAnalyses, retryAnalysis } from '@/api/analyses'
 import { getRequirement } from '@/api/requirements'
 import {
   getWorkflow,
@@ -29,6 +29,7 @@ import { resolveAmbiguityTypeLabel } from '@/components/common/ambiguityLabels.j
 import { useAnalysisPoller } from '@/composables/useAnalysisPoller'
 import { useApiError } from '@/composables/useApiError'
 import {
+  AnalysisKind,
   AnalysisStatus,
   ClarificationStatus,
   IssueStatus,
@@ -55,6 +56,15 @@ const submittingClarificationId = ref(null)
 const staleVersionNotice = ref(false)
 const reviewing = ref(false)
 const regenerating = ref(false)
+/**
+ * 이 요구사항의 **가장 최근 작업**. 분석 이력에서 읽어 온다.
+ *
+ * polling 메모리만 보면 새로고침 순간 실패 정보가 사라진다. 그러면 재시도 버튼이
+ * 안 뜨는데, 질문은 이미 ANSWERED라 답변 재제출도 막혀서 워크플로우가 멈춘다.
+ * workflow 응답의 activeAnalysis도 답이 못 된다 — FAILED는 「활성」이 아니라 항상 null이다.
+ * 그래서 진입할 때마다 이력에서 직접 찾는다 (Spec 6.1 · 8절).
+ */
+const latestAnalysis = ref(null)
 
 const { message, fieldErrors, hasError, captureError, clearError } = useApiError()
 const { analysis: polledAnalysis, isPolling, start: startPolling } = useAnalysisPoller()
@@ -72,10 +82,17 @@ const activeAnalysis = computed(() => {
 })
 const isLocked = computed(() => isPolling.value || activeAnalysis.value !== null)
 
-/** FAILED 작업은 재시도 버튼을 띄운다 (Spec 6.1). */
-const failedAnalysis = computed(() =>
-  polledAnalysis.value?.status === AnalysisStatus.FAILED ? polledAnalysis.value : null,
-)
+/**
+ * FAILED 작업은 재시도 버튼을 띄운다 (Spec 6.1).
+ * 이번 화면에서 관측한 실패(polling)와 새로고침 뒤 이력에서 복구한 실패를 모두 본다.
+ */
+const failedAnalysis = computed(() => {
+  if (polledAnalysis.value?.status === AnalysisStatus.FAILED) {
+    return polledAnalysis.value
+  }
+  const restored = latestAnalysis.value
+  return restored?.status === AnalysisStatus.FAILED ? restored : null
+})
 
 const contentVersion = computed(() => workflow.value?.contentVersion ?? null)
 const status = computed(() => workflow.value?.status ?? requirement.value?.status ?? null)
@@ -140,6 +157,36 @@ async function reloadWorkflow() {
   ])
   workflow.value = next
   requirement.value = detail
+  //작업 상태는 workflow가 다 알려주지 않는다. FAILED는 activeAnalysis에 안 잡히므로
+  //이력에서 따로 읽는다. 실패한 문서 조회가 화면 전체를 막지는 않게 둔다.
+  await refreshLatestAnalysis(detail.documentId)
+}
+
+/**
+ * 이 요구사항의 최신 ANSWER/REVISION 작업을 분석 이력에서 찾는다.
+ *
+ * 이력 API는 문서 단위라 요구사항으로 한 번 더 거른다. 재시도까지 포함해
+ * 항상 ID가 가장 큰 것이 현재 상태다 (B의 문서 상세와 같은 판정 방식).
+ */
+async function refreshLatestAnalysis(documentId) {
+  if (documentId == null) {
+    return
+  }
+  try {
+    const data = await listDocumentAnalyses(documentId)
+    const mine = (data.items ?? []).filter(
+      (a) =>
+        a.requirementId === requirementId.value &&
+        (a.kind === AnalysisKind.ANSWER || a.kind === AnalysisKind.REVISION),
+    )
+    latestAnalysis.value = mine.reduce(
+      (latest, item) => (latest === null || item.id > latest.id ? item : latest),
+      null,
+    )
+  } catch {
+    //이력을 못 읽어도 workflow 화면 자체는 열려 있어야 한다.
+    latestAnalysis.value = null
+  }
 }
 
 /** 진행 중 작업을 이어서 조회한다. 새로고침으로 들어와도 polling이 살아난다 (Spec 8절). */
@@ -170,7 +217,8 @@ async function bootstrap() {
   clearError()
   try {
     await reloadWorkflow()
-    watchAnalysis(workflow.value?.activeAnalysis)
+    //진행 중 작업은 workflow가, 실패는 이력이 알려준다. 둘 다 이어받는다.
+    watchAnalysis(workflow.value?.activeAnalysis ?? latestAnalysis.value)
   } catch (error) {
     captureError(error)
   } finally {
