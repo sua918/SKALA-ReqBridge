@@ -1,9 +1,9 @@
 # ReqBridge API 명세서
 
 - 관리 책임자: 신형섭
-- API 계약 버전: 0.3.0
-- 개정일: 2026-09-02
-- 적용 범위: P1 업무 API 16개와 P2 Preview API 2개를 사용하는 백엔드·프론트엔드의 외부 HTTP/JSON 계약
+- API 계약 버전: 0.4.0
+- 개정일: 2026-09-03
+- 적용 범위: P1 업무 API 17개와 P2 Preview API 2개를 사용하는 백엔드·프론트엔드의 외부 HTTP 계약
 - 검토: 프론트엔드 담당자, 한형준
 - 기준: ReqBridge 백엔드 협업 계획, ReqBridge 팀 주제 제안서, Mini-project 교육 자료 및 이후 사용자 결정
 - 상태: 공식 API 명세이자 팀 공통 구현·검증 기준. 모든 Endpoint의 구현 또는 배포가 완료되었다는 뜻은 아니다.
@@ -18,17 +18,18 @@
 
 | 구분 | 포함 범위 |
 | --- | --- |
-| P1 MVP | 프로젝트·텍스트 문서, Mock 분석, 요구사항 조회, 불명확성 7종, 질문·답변·재판정·추가 회차, 수정안 승인·거절·재생성 |
+| P1 MVP | 프로젝트, TEXT 직접 입력, PDF 파일 업로드, Mock 분석, 요구사항 조회, 불명확성 7종, 질문·답변·재판정·추가 회차, 수정안 승인·거절·재생성 |
 | P2 | 고객 질문서·개발팀용 JSON Preview |
 | P3 | Acceptance Criteria 생성·저장·조회, 수동 질문·요구사항 편집. 이번 Endpoint에 추가하지 않으며 `acceptanceCriteria`는 빈 배열 |
 | 추후 확장 | PDF/Word/CSV 다운로드, 실제 LLM, 단방향 외부 알림, 고객 계정 |
-| 기본 입력 제외 | 실제 PDF 업로드·텍스트 추출. 샘플도 준비된 원문을 TEXT로 등록 |
+| 파일 입력 | PDF 원본은 Supabase Storage에 저장하고, 추출한 텍스트는 PostgreSQL `document.content`에 저장 |
+| 이번 범위 제외 | DOCX, OCR, 이미지 PDF, 여러 파일 동시 업로드, 파일 교체·삭제·다운로드, PostgreSQL binary 저장 |
 
 plan의 구체적인 7.2 절에 따라 P1에는 요구사항 수동 생성·PATCH·삭제를 공개하지 않는다. 포괄적으로 적힌 ‘기본 수정’보다 이 제한을 우선한다. `/api/health`는 기존 실제 계약을 확인한 후 별도로 기재한다. 현재 구현을 확인하지 않은 상태에서 응답을 새로 정의하거나 변경하지 않는다.
 
 ### 공식 계약으로 구체화한 구현 기준
 
-아래는 프론트 연동을 위해 구체화한 공식 계약이다. 기존 내부 Port 서명과 상태·분류 enum 체계를 유지하고 DocumentSourceType(TEXT), ReviewDecision(APPROVE/REJECT)를 명시한다. RequirementStatus는 0.3.0에서 첨부된 개정 DBML 수정안 기준 5값으로 변경했다.
+아래는 프론트 연동을 위해 구체화한 공식 계약이다. 기존 내부 Port 서명과 상태·분류 enum 체계를 유지하고 DocumentSourceType(TEXT/FILE), ReviewDecision(APPROVE/REJECT)를 명시한다. RequirementStatus는 0.3.0에서 첨부된 개정 DBML 수정안 기준 5값으로 변경했다.
 
 1. `GET /documents/{documentId}/analyses` 추가: 새로고침 시 모든 종류의 진행 작업 및 실패 이력을 복구한다.
 2. 외부 ID는 JSON 정수이고 최대 `9,007,199,254,740,991`로 제한한다. DB/Java는 기존 BIGINT/Long을 유지한다. 이 범위를 넘어야 할 때는 외부 ID를 문자열로 바꾸는 계약 변경을 먼저 한다.
@@ -42,7 +43,7 @@ plan의 구체적인 7.2 절에 따라 P1에는 요구사항 수동 생성·PATC
 | 항목 | 계약 |
 | --- | --- |
 | Base path | `/api` (OpenAPI의 servers에 포함, paths에는 중복하지 않음) |
-| 형식 | 요청·응답 `application/json`, UTF-8, camelCase |
+| 형식 | 요청·응답 `application/json`, UTF-8, camelCase. 단, PDF 업로드 요청은 `multipart/form-data` |
 | 성공 | `{ "data": ... }` |
 | 목록 | `{ "data": { "items": [] } }`; P1 페이지네이션 없음 |
 | 오류 | `{ "error": { "code": "...", "message": "...", "fieldErrors": [] } }` |
@@ -75,6 +76,7 @@ Java의 일반 length/@Size와 JavaScript length만으로 코드 포인트 제�
 | P1 | GET | `/api/projects` | 프로젝트 목록 | 한형준 |
 | P1 | GET | `/api/projects/{projectId}` | 프로젝트 상세 | 한형준 |
 | P1 | POST | `/api/projects/{projectId}/documents` | 텍스트 문서 등록 | 한형준 |
+| P1 | POST | `/api/projects/{projectId}/documents/upload` | PDF 문서 등록 | 한형준 |
 | P1 | GET | `/api/projects/{projectId}/documents` | 문서 목록 | 한형준 |
 | P1 | GET | `/api/documents/{documentId}` | 문서 원문 조회 | 한형준 |
 | P1 | GET | `/api/documents/{documentId}/requirements` | 요구사항 목록 | 한형준 |
@@ -94,7 +96,7 @@ Java의 일반 length/@Size와 JavaScript length만으로 코드 포인트 제�
 
 | 구분 | 값 |
 | --- | --- |
-| DocumentSourceType | `TEXT` |
+| DocumentSourceType | `TEXT`, `FILE` |
 | ReviewDecision | `APPROVE`, `REJECT` |
 | AnalysisKind | `DOCUMENT`, `ANSWER`, `REVISION` |
 | AnalysisStatus | `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` |
@@ -113,7 +115,8 @@ Java의 일반 length/@Size와 JavaScript length만으로 코드 포인트 제�
 
 - DB 저장 문자열, Java enum, Mock 분류값, API JSON, 프론트 타입은 위 값을 정확히 일치시킨다. 대소문자 보정·숫자 ordinal·임의 fallback을 허용하지 않는다. 클라이언트 enum 입력 오류는 400 `VALIDATION_ERROR`; Mock의 알 수 없는 분류값은 작업 FAILED/`AI_OUTPUT_INVALID`다.
 - `ReviewDecision`은 요청 전용 명령이다. `APPROVE → APPROVED`, `REJECT → REJECTED`로 변환한다. 이를 저장하기 위한 별도 DB 컬럼은 필요하지 않다.
-- `DocumentSourceType`은 이번 MVP에서 `TEXT`만 사용한다. 생략·null·`FILE`·`text`·숫자·알 수 없는 값은 400이다. 파일 업로드를 실제 지원할 때 계약을 확장한다.
+- `DocumentSourceType.TEXT`는 사용자가 문자열 원문을 직접 등록할 때 사용한다. 기존 `POST /api/projects/{projectId}/documents`는 `TEXT`만 허용하며 생략·null·`FILE`·`text`·숫자·알 수 없는 값은 400이다.
+- `DocumentSourceType.FILE`은 PDF 업로드로 생성된 문서에 서버가 지정한다. 업로드 요청에는 `sourceType`을 보내지 않으며 대소문자 자동 보정은 하지 않는다.
 - 재시도는 원본 `AnalysisKind`를 유지하고 `retryOfAnalysisId`로 연결한다. `RETRY`나 `SUCCESS`를 추가하지 않는다.
 - `ClarificationStatus.ANSWERED`는 답변 저장 상태다. 판정 대기·실패·불충분한 답변도 포함하며, 충분하다고 판정한 답변만 `RESOLVED`다. 이전 불충분한 답변 이력은 ANSWERED를 유지한다.
 - DB의 출처 필드(adapter/source)는 상태 enum과 별개이며 외부 응답에 새로 추가하지 않는다.
@@ -214,7 +217,7 @@ id 내림차순. 페이지네이션 없음.
 
 `POST /api/projects/{projectId}/documents` · 한형준 · P1
 
-문서만 저장한다. 분석은 별도 POST로 요청한다. sourceType은 TEXT만 허용한다. 동일 본문 재전송은 새 문서를 생성한다.
+문서만 저장한다. 분석은 별도 POST로 요청한다. 기존 `application/json` 계약을 유지하며 sourceType은 TEXT만 허용한다. FILE은 PDF 업로드 전용 Endpoint를 사용한다. 동일 본문 재전송은 새 문서를 생성한다.
 
 요청 본문:
 
@@ -240,6 +243,41 @@ id 내림차순. 페이지네이션 없음.
   }
 }
 ```
+
+### 5.4.1. PDF 문서 등록
+
+`POST /api/projects/{projectId}/documents/upload` · 한형준 · P1
+
+`multipart/form-data` 요청으로 PDF 한 개를 등록한다. `title`과 `file`은 필수이며 `sourceType`은 보내지 않는다. `title`은 기존 문서 제목과 같은 정규화 규칙을 적용하고 최대 200 코드 포인트다. `file`은 비어 있지 않은 PDF만 허용하며 최대 크기는 10MB다.
+
+서버는 다음 순서로 처리한다.
+
+1. 프로젝트 존재 확인
+2. 파일 형식과 크기 검증
+3. PDF 텍스트 추출
+4. 추출 텍스트의 공백-only 여부와 기존 `Document.content` 제한 검증
+5. 원본 PDF를 Supabase Storage에 저장
+6. PostgreSQL에 `sourceType=FILE`, `content=추출된 텍스트`인 Document 저장
+7. 기존 `Document` 응답 반환
+
+성공 응답 `201` · `Document`
+
+`Location: /api/documents/{documentId}`
+
+```json
+{
+  "data": {
+    "id": 102,
+    "projectId": 1,
+    "title": "고객 요구사항",
+    "sourceType": "FILE",
+    "content": "PDF에서 추출된 요구사항 원문...",
+    "createdAt": "2026-09-03T00:00:00Z"
+  }
+}
+```
+
+`storagePath`, `bucketName`, `storageObjectKey`, Supabase URL, service role key와 credential은 외부 응답에 포함하지 않는다. PDF 원본 binary는 PostgreSQL에 저장하지 않는다.
 
 ### 5.5. 문서 목록
 
@@ -1019,7 +1057,7 @@ PreviewSummary는 기존 Core/Workflow Port에서 읽은 요구사항·문제·�
 
 | HTTP | code | 의미 |
 | --- | --- | --- |
-| 400 | VALIDATION_ERROR | JSON 형식·필수값·길이·enum·정수 범위·미정의 필드 오류 |
+| 400 | VALIDATION_ERROR | JSON 형식·필수값·길이·enum·정수 범위·미정의 필드 오류. PDF 업로드에서는 file 누락·빈 파일·PDF가 아닌 파일·제목 검증 실패·추출 텍스트가 비어 있거나 공백-only·10MB 초과 포함 |
 | 404 | RESOURCE_NOT_FOUND | 프로젝트/문서/요구사항/질문/작업/수정안 없음 |
 | 409 | ANALYSIS_IN_PROGRESS | 같은 문서/요구사항의 활성 작업 존재 |
 | 409 | DOCUMENT_ALREADY_ANALYZED | 문서 최초 분석 성공 이력 존재 |
@@ -1032,7 +1070,7 @@ PreviewSummary는 기존 Core/Workflow Port에서 읽은 요구사항·문제·�
 | 409 | ANALYSIS_NOT_RETRYABLE | FAILED가 아니고 기존 직접 재시도도 없는 대상 |
 | 409 | PREVIEW_VERSION_CONFLICT | 확정본·승인 수정안 간 불일치 |
 | 409 | STATE_CONFLICT | 위 코드로 설명되지 않는 업무 전제 위반 |
-| 500 | INTERNAL_ERROR | API 요청 처리 자체의 서버 오류 |
+| 500 | INTERNAL_ERROR | API 요청 처리 자체의 서버 오류. 예상하지 못한 Storage 또는 PDF 처리 오류 포함 |
 
 비동기 실패 코드는 HTTP 오류와 구분한다. 작업 조회는 HTTP 200이며 `data.status=FAILED`, `data.error.code`에 `AI_OUTPUT_INVALID`, `ANALYSIS_EXECUTION_FAILED`, `ANALYSIS_INTERRUPTED`, `CONTENT_VERSION_CONFLICT` 중 원인을 저장한다. 프론트는 알 수 없는 실패 코드도 message와 일반 재시도 안내로 처리한다. 클라우드 DB를 여러 프로세스가 공유할 때 다른 서버의 정상 작업을 재시작 복구 대상으로 처리하지 않는다. 개발 환경 격리 또는 작업 소유 범위는 DB/실행 설정에서 관리한다.
 
@@ -1045,6 +1083,8 @@ PreviewSummary는 기존 Core/Workflow Port에서 읽은 요구사항·문제·�
 | 결과 Preview (P2 패널/탭) | customer 또는 developer Preview | 현재 질문서/확정 요구사항 표시; 다운로드 버튼 미제공 |
 
 문서 등록 후 분석은 별도 버튼으로 시작할 수 있다. 모든 작업 완료 뒤 영향받은 목록·기본 상세·workflow·열린 Preview를 다시 조회한다. 새로고침 시 문서 분석 이력의 PENDING/PROCESSING을 찾아 polling을 재개한다. 질문 선택 시 자신의 WAITING 상태와 requirement의 activeAnalysis=null을 확인한다. 다른 질문의 작업이 실행 중이면 해당 요구사항 전체 답변 입력/검토를 잠시 비활성화한다.
+
+FILE Document도 생성 이후에는 TEXT Document와 동일하게 `POST /api/documents/{documentId}/analyses`로 분석한다. Workflow는 sourceType별 분석 로직을 만들지 않고 `CoreRequirementPort.DocumentSnapshot.content`의 추출 텍스트를 기존과 동일하게 사용한다. 이후 Analysis → Requirement → AmbiguityIssue → Clarification → RequirementRevision 흐름과 상태·버전 규칙은 변경하지 않는다.
 
 ### 공통 Mock E2E 시나리오
 
@@ -1107,9 +1147,18 @@ PreviewSummary는 기존 Core/Workflow Port에서 읽은 요구사항·문제·�
 
 | 필드 | 타입 | 필수 | null | 조건·의미 |
 | --- | --- | --- | --- | --- |
-| `title` | string | 필수 | 불가 | 문서 제목 최대 200자 |
-| `sourceType` | DocumentSourceType | 필수 | 불가 | - |
-| `content` | string | 필수 | 불가 | 등록 후 원문 수정 없음. 샘플은 프론트가 준비된 텍스트를 제출. 최대 100000자 |
+| `title` | string | 필수 | 불가 | 문서 제목 최대 200 코드 포인트 |
+| `sourceType` | DocumentSourceType | 필수 | 불가 | `TEXT`만 허용 |
+| `content` | string | 필수 | 불가 | 등록 후 원문 수정 없음. 최대 100000 코드 포인트 |
+
+### DocumentUpload
+
+`multipart/form-data` 전용 요청이다. `sourceType`은 요청 필드가 아니며 서버가 `FILE`로 결정한다.
+
+| 필드 | 타입 | 필수 | null | 조건·의미 |
+| --- | --- | --- | --- | --- |
+| `title` | string | 필수 | 불가 | 기존 문서 제목 규칙과 동일. 최대 200 코드 포인트 |
+| `file` | binary | 필수 | 불가 | 비어 있지 않은 PDF 한 개. 최대 10MB. DOCX·OCR·이미지 PDF는 지원하지 않음 |
 
 ### DocumentSummary
 
@@ -1130,7 +1179,7 @@ PreviewSummary는 기존 Core/Workflow Port에서 읽은 요구사항·문제·�
 | `title` | string | 필수 | 불가 | - |
 | `sourceType` | DocumentSourceType | 필수 | 불가 | - |
 | `createdAt` | string | 필수 | 불가 | UTC ISO-8601, 예: 2026-09-02T06:00:00Z |
-| `content` | string | 필수 | 불가 | - |
+| `content` | string | 필수 | 불가 | TEXT는 사용자가 등록한 원문, FILE은 서버가 PDF에서 추출한 텍스트. 최대 100000 코드 포인트 |
 
 ### Requirement
 
@@ -1419,6 +1468,8 @@ confirmedRequirements에는 APPROVED 수정안만 포함. evidenceAnswers는 해
 
 ## 11. 개정 내역과 검증 기준
 
+0.4.0은 기존 Analysis·Requirement·Workflow Endpoint의 경로·JSON 구조·상태·버전 규칙을 유지하면서 PDF 파일 업로드를 추가했다. `DocumentSourceType`에 `FILE`을 추가하고 기존 TEXT 입력과 병행한다. PDF 원본은 Supabase Storage에, 추출 텍스트는 기존 `Document.content`에 저장하며 Storage 내부 정보와 PostgreSQL binary는 외부 계약에 포함하지 않는다.
+
 0.3.0은 0.2.0의 Endpoint·HTTP 메서드·JSON 구조·담당자를 유지하면서 RequirementStatus를 첨부된 개정 DBML 수정안 기준 5값으로 변경했다. `OPEN`을 제거하고 `EXTRACTED`, `AMBIGUOUS`, `CLARIFYING`을 추가했으며 관련 상태 전이와 예시를 함께 수정했다.
 
 0.2.0은 0.1.0을 대체하며 다음을 반영했다.
@@ -1436,3 +1487,5 @@ API의 구조 제약은 [OpenAPI 3.0.3 명세](https://spec.openapis.org/oas/v3.
 과거 0.2.0 작성 당시 검증 기록: 18개 Endpoint·담당자와 9개 enum을 당시 API/plan/DB 요청에 대조했고, 당시 제공된 OpenAPI의 문법·참조, YAML 예시 85개와 Markdown JSON 27개를 검증했다. 이는 이번 0.3.0 공식화 작업에서 OpenAPI나 DB 요청을 다시 검증했다는 뜻이 아니다. 실제 Spring Boot·DB·HTTP 통합 테스트는 수행하지 않았다.
 
 0.3.0 문서 검증 결과(2026-09-02): Markdown의 JSON 코드 블록 28개를 파싱했고, 공식화 전 문서와 비교해 필드·타입 구조가 유지됐음을 확인했다. Endpoint는 P1 16개·P2 2개이며 HTTP 메서드·경로·담당자가 유지됐다. JSON의 `OPEN` 값은 IssueStatus에만 남아 있다. OpenAPI YAML과 DB 수정 요청서는 저장소에 없어 문법·참조·스키마 일치 및 `/api` 중복 여부를 검증하지 않았다. 애플리케이션·DB 테스트는 문서 작업 범위 밖이라 실행하지 않았다.
+
+0.4.0 문서 검증 결과(2026-09-03): Markdown JSON 코드 블록 파싱, P1 17개·P2 2개 Endpoint, `DocumentSourceType`의 `TEXT | FILE`, PDF 업로드의 입력·오류·10MB 제한과 Spring multipart 설정 일치를 검사한다. OpenAPI YAML과 `contract-changes.md`는 저장소에 없어 수정하거나 새로 만들지 않았다. 실제 PDF 추출·Storage·DB·HTTP 통합 테스트는 구현 후 별도 검증 대상이다.
