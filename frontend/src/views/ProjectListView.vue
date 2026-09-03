@@ -1,16 +1,12 @@
 <script setup>
 import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { listProjects } from '@/api/projects'
 import { useMock } from '@/api/config'
-import StatusBadge from '@/components/common/StatusBadge.vue'
 import ErrorMessage from '@/components/common/ErrorMessage.vue'
-import AnalysisFailureBanner from '@/components/common/AnalysisFailureBanner.vue'
 import { useApiError } from '@/composables/useApiError'
-import {
-  AnalysisStatus,
-  RequirementStatus,
-} from '@/types/api'
 
+const router = useRouter()
 const loading = ref(true)
 const projects = ref([])
 const { message, fieldErrors, hasError, captureError, clearError } = useApiError()
@@ -26,12 +22,18 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+function openProject(projectId) {
+  router.push({
+    name: 'document-list',
+    params: { projectId: String(projectId) },
+  })
+}
 </script>
 
 <template>
   <section class="placeholder-page">
     <h1>프로젝트 목록</h1>
-    <p>준비 중 (B) — API·공통 부품 확인</p>
     <p class="meta">Mock: {{ useMock ? 'ON' : 'OFF' }}</p>
 
     <ErrorMessage
@@ -41,56 +43,50 @@ onMounted(async () => {
     />
 
     <p v-if="loading">불러오는 중…</p>
-    <ul v-else-if="!hasError">
+    <ul v-else-if="!hasError" class="project-list">
       <li v-for="project in projects" :key="project.id">
-        #{{ project.id }} {{ project.name }}
+        <button type="button" class="project-button" @click="openProject(project.id)">
+          #{{ project.id }} {{ project.name }}
+        </button>
       </li>
     </ul>
-
-    <!-- 공통 부품 스모크 (문서 화면에 배치 예정) -->
-    <div class="smoke">
-      <h2>공통 부품</h2>
-      <div class="smoke-row">
-        <StatusBadge :kind="'requirement'" :value="RequirementStatus.CLARIFYING" />
-        <StatusBadge :kind="'requirement'" :value="RequirementStatus.CONFIRMED" />
-        <StatusBadge :kind="'analysis'" :value="AnalysisStatus.PROCESSING" />
-        <StatusBadge :kind="'analysis'" :value="AnalysisStatus.FAILED" />
-      </div>
-      <AnalysisFailureBanner
-        code="AI_OUTPUT_INVALID"
-        message="Mock 분석 결과가 올바르지 않습니다."
-      />
-    </div>
   </section>
 </template>
 
 <style scoped>
 .meta {
-  margin: 8px 0 0;
+  margin: 8px 0 16px;
   font-size: 0.85rem;
   color: #94a3b8;
 }
 
-ul {
-  margin: 16px 0 0;
-  padding-left: 1.2rem;
+.project-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.smoke {
-  margin-top: 28px;
-  padding-top: 20px;
-  border-top: 1px solid #e5e7eb;
+.project-list li + li {
+  margin-top: 8px;
 }
 
-.smoke h2 {
-  margin: 0 0 12px;
-  font-size: 1rem;
+.project-button {
+  display: block;
+  width: 100%;
+  max-width: 520px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  text-align: left;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0f172a;
+  cursor: pointer;
 }
 
-.smoke-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
+.project-button:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
 }
 </style>

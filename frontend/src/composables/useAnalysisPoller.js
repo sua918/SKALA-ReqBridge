@@ -15,6 +15,12 @@ const TERMINAL = new Set([AnalysisStatus.COMPLETED, AnalysisStatus.FAILED])
  */
 export function useAnalysisPoller(options = {}) {
   const intervalMs = options.intervalMs ?? 1000
+  const handlers = {
+    onComplete: options.onComplete,
+    onFailed: options.onFailed,
+    onError: options.onError,
+  }
+
   const analysis = shallowRef(null)
   const isPolling = ref(false)
   const lastError = ref(null)
@@ -48,22 +54,27 @@ export function useAnalysisPoller(options = {}) {
       if (TERMINAL.has(next.status)) {
         stop()
         if (next.status === AnalysisStatus.COMPLETED) {
-          options.onComplete?.(next)
+          handlers.onComplete?.(next)
         } else {
-          options.onFailed?.(next)
+          handlers.onFailed?.(next)
         }
       }
     } catch (error) {
       lastError.value = error
       stop()
-      options.onError?.(error)
+      handlers.onError?.(error)
     }
   }
 
   /**
    * @param {number|string} analysisId
+   * @param {object} [runtimeOptions] onComplete / onFailed / onError 덮어쓰기
    */
-  function start(analysisId) {
+  function start(analysisId, runtimeOptions = {}) {
+    if (runtimeOptions.onComplete) handlers.onComplete = runtimeOptions.onComplete
+    if (runtimeOptions.onFailed) handlers.onFailed = runtimeOptions.onFailed
+    if (runtimeOptions.onError) handlers.onError = runtimeOptions.onError
+
     stop()
     activeAnalysisId = Number(analysisId)
     isPolling.value = true
