@@ -27,6 +27,7 @@ public class DocumentService {
 		this(documentRepository, projectRepository, null);
 	}
 
+	@org.springframework.beans.factory.annotation.Autowired
 	public DocumentService(DocumentRepository documentRepository, ProjectRepository projectRepository,
 			@Nullable ApplicationEventPublisher events) {
 		this.documentRepository = documentRepository;

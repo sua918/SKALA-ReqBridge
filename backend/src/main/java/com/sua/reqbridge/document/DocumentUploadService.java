@@ -32,6 +32,7 @@ public class DocumentUploadService {
 		this(projects, extractor, storage, writer, null);
 	}
 
+	@org.springframework.beans.factory.annotation.Autowired
 	public DocumentUploadService(ProjectService projects, PdfTextExtractor extractor,
 			DocumentStorage storage, DocumentFileWriter writer,
 			@Nullable ApplicationEventPublisher events) {
