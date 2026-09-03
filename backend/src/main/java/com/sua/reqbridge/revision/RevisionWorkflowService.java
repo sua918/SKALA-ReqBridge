@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.sua.reqbridge.ambiguity.AmbiguityIssueRepository;
 import com.sua.reqbridge.analysis.AiOutputInvalidException;
+import com.sua.reqbridge.analysis.AnalyzerOutputValidator;
 import com.sua.reqbridge.analysis.Analysis;
 import com.sua.reqbridge.analysis.AnalysisRepository;
 import com.sua.reqbridge.clarification.Clarification;
@@ -134,9 +135,7 @@ public class RevisionWorkflowService {
 				.orElse(null);
 		RevisionProposal proposal = analyzer.generateRevision(new RevisionGenerationInput(
 				requirementId, originalText, contexts, latestRejectionReason));
-		if (proposal == null || proposal.proposedText() == null || proposal.proposedText().isBlank()) {
-			throw new AiOutputInvalidException("수정안 텍스트가 올바르지 않습니다.");
-		}
+		AnalyzerOutputValidator.validateRevisionProposal(proposal);
 		RequirementRevision revision = revisions.save(RequirementRevision.proposed(
 				requirementId, revisionNo, proposal.proposedText(), analysis.getInputContentVersion(), evidenceIds));
 		core.changeStatus(requirementId, analysis.getInputContentVersion(), RequirementStatus.IN_REVIEW);

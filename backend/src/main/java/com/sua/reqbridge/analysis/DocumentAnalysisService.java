@@ -84,9 +84,7 @@ public class DocumentAnalysisService {
 		DocumentSnapshot document = core.getDocument(analysis.getDocumentId());
 		DocumentAnalysisResult output = analyzer.analyzeDocument(
 				new DocumentAnalysisInput(document.id(), document.content()));
-		if (output == null || output.requirements() == null || output.requirements().isEmpty()) {
-			throw new AiOutputInvalidException("분석기에서 추출된 요구사항이 없습니다.");
-		}
+		AnalyzerOutputValidator.validateDocumentResult(output);
 		List<RequirementSnapshot> created = core.createRequirements(document.id(), analysisId,
 				output.requirements().stream()
 						.map(item -> new RequirementSeed(item.sequenceNo(), item.originalText()))
@@ -174,7 +172,7 @@ public class DocumentAnalysisService {
 			}
 		}
 
-		Analysis retryAnalysis = analyses.save(Analysis.retry(original));
+		Analysis retryAnalysis = analyses.save(Analysis.retry(original, analyzer.adapterType(), analyzer.schemaVersion()));
 		switch (retryAnalysis.getKind()) {
 			case DOCUMENT -> events.publishEvent(new DocumentAnalysisRequested(retryAnalysis.getId()));
 			case ANSWER -> events.publishEvent(new AnswerAnalysisRequested(retryAnalysis.getId()));

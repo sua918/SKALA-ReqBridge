@@ -94,7 +94,8 @@ public class MockWorkflowAnalyzer implements WorkflowAnalyzer {
 	}
 
 	public Assessment assess(String answerText) {
-		AnswerAssessment result = assessAnswer(new AnswerAssessmentInput(0L, 0L, null, answerText));
+		AnswerAssessment result = assessAnswer(new AnswerAssessmentInput(
+				0L, 1L, "", null, null, 0L, 0L, 1, null, answerText, List.of()));
 		return new Assessment(result.sufficient(), result.reason(), result.nextQuestionText());
 	}
 

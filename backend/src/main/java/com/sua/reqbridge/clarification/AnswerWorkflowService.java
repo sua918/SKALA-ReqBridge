@@ -12,6 +12,7 @@ import com.sua.reqbridge.ambiguity.AmbiguityIssueRepository;
 import com.sua.reqbridge.analysis.Analysis;
 import com.sua.reqbridge.analysis.AnalysisRepository;
 import com.sua.reqbridge.analysis.AiOutputInvalidException;
+import com.sua.reqbridge.analysis.AnalyzerOutputValidator;
 import com.sua.reqbridge.contract.AnalysisKind;
 import com.sua.reqbridge.contract.AnalysisStatus;
 import com.sua.reqbridge.contract.ClarificationStatus;
@@ -112,12 +113,26 @@ public class AnswerWorkflowService {
 		Clarification clarification = clarification(analysis.getClarificationId());
 		AmbiguityIssue issue = issues.findById(clarification.getIssueId())
 				.orElseThrow(() -> new ResourceNotFoundException("불명확성 문제를 찾을 수 없습니다."));
+		RequirementSnapshot requirement = core.getRequirement(analysis.getRequirementId());
+		String requirementText = requirement != null ? requirement.originalText() : "";
+		long contentVersion = requirement != null ? requirement.contentVersion() : analysis.getInputContentVersion();
+
+		List<AnswerAssessmentInput.ClarificationHistory> history = clarifications
+				.findByRequirementIdOrderByIssueIdAscRoundNoAsc(analysis.getRequirementId()).stream()
+				.filter(item -> item.getIssueId() == issue.getId()
+						&& item.getId() != clarification.getId()
+						&& item.getAnswerText() != null)
+				.map(item -> new AnswerAssessmentInput.ClarificationHistory(
+						item.getId(), item.getRoundNo(), item.getQuestionText(), item.getAnswerText()))
+				.toList();
+
 		AnswerAssessment assessed = analyzer.assessAnswer(new AnswerAssessmentInput(
-				clarification.getId(), clarification.getIssueId(),
-				clarification.getQuestionText(), clarification.getAnswerText()));
-		if (assessed == null) {
-			throw new AiOutputInvalidException("답변 판정 결과가 올바르지 않습니다.");
-		}
+				analysis.getRequirementId(), contentVersion, requirementText,
+				issue.getType(), issue.getEvidence(),
+				clarification.getId(), clarification.getIssueId(), clarification.getRoundNo(),
+				clarification.getQuestionText(), clarification.getAnswerText(), history));
+		com.sua.reqbridge.analysis.AnalyzerOutputValidator.validateAnswerAssessment(assessed);
+
 		Long nextId = null;
 		List<Long> revisionIds = List.of();
 		if (assessed.sufficient()) {
@@ -134,17 +149,14 @@ public class AnswerWorkflowService {
 				List<Long> evidenceIds = answeredClarifications.stream()
 						.map(Clarification::getId)
 						.toList();
-				RequirementSnapshot requirement = core.getRequirement(analysis.getRequirementId());
-				String originalText = requirement != null ? requirement.originalText() : "";
+				String originalText = requirementText;
 				List<ClarificationContext> contexts = answeredClarifications.stream()
 						.map(item -> new ClarificationContext(
 								item.getId(), item.getIssueId(), item.getQuestionText(), item.getAnswerText()))
 						.toList();
 				RevisionProposal proposal = analyzer.generateRevision(new RevisionGenerationInput(
 						analysis.getRequirementId(), originalText, contexts, null));
-				if (proposal == null || proposal.proposedText() == null || proposal.proposedText().isBlank()) {
-					throw new AiOutputInvalidException("수정안 텍스트가 올바르지 않습니다.");
-				}
+				com.sua.reqbridge.analysis.AnalyzerOutputValidator.validateRevisionProposal(proposal);
 				RequirementRevision revision = revisions.save(RequirementRevision.proposed(
 						analysis.getRequirementId(), revisionNo, proposal.proposedText(),
 						analysis.getInputContentVersion(), evidenceIds));

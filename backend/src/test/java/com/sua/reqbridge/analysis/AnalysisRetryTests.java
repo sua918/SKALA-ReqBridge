@@ -54,6 +54,8 @@ class AnalysisRetryTests {
 		core = mock(CoreRequirementPort.class);
 		events = mock(ApplicationEventPublisher.class);
 		analyzer = mock(com.sua.reqbridge.contract.ai.WorkflowAnalyzer.class);
+		when(analyzer.adapterType()).thenReturn(com.sua.reqbridge.contract.AnalysisAdapterType.MOCK);
+		when(analyzer.schemaVersion()).thenReturn("1.0.0");
 		json = new ObjectMapper();
 		service = new DocumentAnalysisService(analyses, issues, clarifications, core, events, analyzer, json);
 	}
@@ -213,16 +215,47 @@ class AnalysisRetryTests {
 	}
 
 	@Test
-	void retryPreservesAdapterTypeAndSchemaVersion() {
+	void retryAppliesCurrentAnalyzerMetadata() {
 		Analysis failed = Analysis.pendingDocument(101, "{}", com.sua.reqbridge.contract.AnalysisAdapterType.LLM, "2.1.0");
 		ReflectionTestUtils.setField(failed, "id", 301L);
 		failed.start(Instant.now());
 		failed.fail("AI_OUTPUT_INVALID", "fail", Instant.now());
 
-		Analysis retried = Analysis.retry(failed);
+		// 현재 Analyzer가 MOCK / 1.0.0일 때
+		Analysis retried = Analysis.retry(failed, com.sua.reqbridge.contract.AnalysisAdapterType.MOCK, "1.0.0");
 
-		assertThat(retried.getAdapterType()).isEqualTo(com.sua.reqbridge.contract.AnalysisAdapterType.LLM);
-		assertThat(retried.getSchemaVersion()).isEqualTo("2.1.0");
+		assertThat(retried.getAdapterType()).isEqualTo(com.sua.reqbridge.contract.AnalysisAdapterType.MOCK);
+		assertThat(retried.getSchemaVersion()).isEqualTo("1.0.0");
 		assertThat(retried.getRetryOfAnalysisId()).isEqualTo(301L);
+	}
+
+	@Test
+	void serviceRetryUsesCurrentAnalyzerMetadata() {
+		when(analyzer.adapterType()).thenReturn(com.sua.reqbridge.contract.AnalysisAdapterType.MOCK);
+		when(analyzer.schemaVersion()).thenReturn("1.0.0");
+
+		Analysis failed = Analysis.pendingDocument(101, "{}", com.sua.reqbridge.contract.AnalysisAdapterType.LLM, "2.1.0");
+		ReflectionTestUtils.setField(failed, "id", 301L);
+		failed.start(Instant.now());
+		failed.fail("AI_OUTPUT_INVALID", "fail", Instant.now());
+
+		when(analyses.findById(301L)).thenReturn(Optional.of(failed));
+		when(analyses.findFirstByRetryOfAnalysisIdOrderByIdDesc(301L)).thenReturn(Optional.empty());
+		when(analyses.existsByDocumentIdAndKindAndStatusIn(101L, AnalysisKind.DOCUMENT, java.util.List.of(AnalysisStatus.PENDING, AnalysisStatus.PROCESSING))).thenReturn(false);
+		when(analyses.existsByDocumentIdAndKindAndStatus(101L, AnalysisKind.DOCUMENT, AnalysisStatus.COMPLETED)).thenReturn(false);
+
+		org.mockito.ArgumentCaptor<Analysis> captor = org.mockito.ArgumentCaptor.forClass(Analysis.class);
+		when(analyses.save(captor.capture())).thenAnswer(inv -> {
+			Analysis a = inv.getArgument(0);
+			ReflectionTestUtils.setField(a, "id", 309L);
+			return a;
+		});
+
+		service.retry(301L);
+
+		Analysis saved = captor.getValue();
+		assertThat(saved.getAdapterType()).isEqualTo(com.sua.reqbridge.contract.AnalysisAdapterType.MOCK);
+		assertThat(saved.getSchemaVersion()).isEqualTo("1.0.0");
+		assertThat(saved.getRetryOfAnalysisId()).isEqualTo(301L);
 	}
 }

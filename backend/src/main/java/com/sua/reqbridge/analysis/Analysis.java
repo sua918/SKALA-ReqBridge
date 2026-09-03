@@ -147,13 +147,20 @@ public class Analysis {
 		if (failedAnalysis == null) {
 			throw new IllegalArgumentException("재시도할 대상 분석 작업이 필요합니다.");
 		}
+		return retry(failedAnalysis, failedAnalysis.getAdapterType(), failedAnalysis.getSchemaVersion());
+	}
+
+	public static Analysis retry(Analysis failedAnalysis, AnalysisAdapterType adapterType, String schemaVersion) {
+		if (failedAnalysis == null) {
+			throw new IllegalArgumentException("재시도할 대상 분석 작업이 필요합니다.");
+		}
 		if (failedAnalysis.getStatus() != AnalysisStatus.FAILED) {
 			throw new IllegalStateException("FAILED 작업만 재시도할 수 있습니다.");
 		}
 		Analysis retried = new Analysis(failedAnalysis.getKind(), failedAnalysis.getDocumentId(),
 				failedAnalysis.getRequirementId(), failedAnalysis.getClarificationId(),
 				failedAnalysis.getInputContentVersion(), failedAnalysis.getInputSnapshot(),
-				failedAnalysis.getAdapterType(), failedAnalysis.getSchemaVersion());
+				Objects.requireNonNull(adapterType), Objects.requireNonNull(schemaVersion));
 		retried.retryOfAnalysisId = failedAnalysis.getId();
 		return retried;
 	}

@@ -57,12 +57,14 @@ class MockWorkflowAnalyzerTests {
 		assertThat(docResult.requirements().getFirst().issues()).hasSize(2);
 
 		var sufficientAssessment = analyzer.assessAnswer(new com.sua.reqbridge.contract.ai.AnswerAssessmentInput(
-				10L, 20L, "질문", "최대 동시 사용자 3,000명입니다."));
+				100L, 1L, CONTENT, com.sua.reqbridge.contract.AmbiguityType.QUANTITY_MISSING, "근거",
+				10L, 20L, 1, "질문", "최대 동시 사용자 3,000명입니다.", java.util.List.of()));
 		assertThat(sufficientAssessment.sufficient()).isTrue();
 		assertThat(sufficientAssessment.nextQuestionText()).isNull();
 
 		var insufficientAssessment = analyzer.assessAnswer(new com.sua.reqbridge.contract.ai.AnswerAssessmentInput(
-				10L, 20L, "질문", "많이 접속할 것 같습니다."));
+				100L, 1L, CONTENT, com.sua.reqbridge.contract.AmbiguityType.QUANTITY_MISSING, "근거",
+				10L, 20L, 1, "질문", "많이 접속할 것 같습니다.", java.util.List.of()));
 		assertThat(insufficientAssessment.sufficient()).isFalse();
 		assertThat(insufficientAssessment.nextQuestionText()).isNotNull();
 
