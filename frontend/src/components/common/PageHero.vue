@@ -80,6 +80,13 @@ defineProps({
   line-height: var(--lh-display);
   color: var(--accent-700);
   word-break: keep-all;
+  /* 문서 제목이 그대로 올라오는 자리다. 200자짜리 제목이 들어오면 머리말만 다섯 줄이
+     되어 본문이 화면 밖으로 밀린다. 세 줄에서 자른다 — 전문은 경로와 본문에 있다. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
 }
 /* 제목이 화면의 종류라면 부제는 그 화면이 다루는 대상(문서명 등)이다. */
 .subject {
@@ -98,16 +105,20 @@ defineProps({
 }
 .actions { display: flex; align-items: center; gap: 10px; }
 
-/* 숫자 줄. 항목 사이를 얇은 세로 괘선으로 갈라 표처럼 읽히게 한다. */
+/* 숫자 줄. 항목 사이를 얇은 세로 괘선으로 갈라 표처럼 읽히게 한다.
+   숫자와 이름을 칸 가운데로 맞춘다. 오른쪽 정렬이면 「2」와 「12」의 자릿수가 다를 때
+   숫자가 이름 끝에 매달려 줄이 들쭉날쭉해 보인다. 가운데로 두면 자릿수가 늘어도
+   두 줄의 축이 하나로 유지된다. */
 .chips { display: flex; align-items: stretch; }
 .chip {
-  display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
-  padding: 0 14px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 0 18px;
   border-left: 1px solid var(--rule);
 }
-.chip:first-child { border-left: 0; padding-left: 0; }
+.chip:first-child { border-left: 0; }
 .chip:last-child { padding-right: 0; }
-.chip .v { font-size: 19px; line-height: 1.2; color: var(--fg-950); }
+/* 제목이 38px까지 커진 만큼 숫자도 함께 올린다. 19px은 제목 옆에서 각주로 보였다. */
+.chip .v { font-size: 26px; font-weight: 700; line-height: 1.15; color: var(--fg-950); }
 .chip .l { font-size: var(--fs-micro); color: var(--fg-500); white-space: nowrap; }
 
 @media (max-width: 900px) {

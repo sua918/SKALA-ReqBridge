@@ -296,14 +296,12 @@ onMounted(() => {
             <span class="scan" aria-hidden="true" />
             <div class="body">
               <div class="head"><span class="k">분석 처리 중</span></div>
-              <p class="msg">1초 간격으로 상태를 조회하고 있습니다.</p>
+              <p class="msg">끝나면 요구사항이 오른쪽에 나타납니다.</p>
             </div>
           </div>
 
           <p v-else class="mi hint">
-            {{ isAnalyzed
-              ? '분석 완료 · 이번 분석에서 확인된 불명확성 ' + detectedIssueCount + '건'
-              : '아직 분석하지 않았습니다. 분석을 시작하면 요구사항이 추출됩니다.' }}
+            {{ isAnalyzed ? '확인된 불명확성 ' + detectedIssueCount + '건' : '아직 분석하지 않았습니다.' }}
           </p>
 
           <div class="btnrow">

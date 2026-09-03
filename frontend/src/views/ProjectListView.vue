@@ -109,10 +109,11 @@ onMounted(() => {
                  저장 순서라 5번 다음에 12번이 오고, 사용자가 셀 수 있는 수가 아니다.
                  프로젝트는 이름으로 구분한다 (프론트엔드-추가-요청사항 2.3). -->
             <div class="pbody">
-              <div class="hd pname">{{ project.name }}</div>
-              <div class="mi pdesc" :class="{ none: !project.description }">
-                {{ project.description || '설명 없음' }}
-              </div>
+              <div class="hd pname" :title="project.name">{{ project.name }}</div>
+              <div
+                class="mi pdesc" :class="{ none: !project.description }"
+                :title="project.description || undefined"
+              >{{ project.description || '설명 없음' }}</div>
             </div>
             <!-- 화살표만 있으면 눌러서 어디로 가는지 알 수 없다. 행이 하는 일을 적는다. -->
             <span class="mi act">

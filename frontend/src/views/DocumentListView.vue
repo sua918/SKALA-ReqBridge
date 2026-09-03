@@ -184,7 +184,7 @@ onMounted(() => {
             @click="openDocument(doc.id)"
           >
             <!-- 저장번호를 뺐다. 문서는 제목으로 구분한다 (프론트엔드-추가-요청사항 2.3). -->
-            <span class="hd dtitle">{{ doc.title }}</span>
+            <span class="hd dtitle" :title="doc.title">{{ doc.title }}</span>
             <span class="mi dsrc" :class="{ file: doc.sourceType === DocumentSourceType.FILE }">
               {{ doc.sourceType === DocumentSourceType.FILE ? 'PDF' : '직접 입력' }}
             </span>
@@ -215,12 +215,9 @@ onMounted(() => {
         <form class="card pad" @submit.prevent="onUpload">
           <div class="cardhead">
             <span class="eb">PDF 업로드 및 분석</span>
-            <span class="mi srchint">파일에서 원문 추출</span>
           </div>
 
-          <p class="mi hint">
-            PDF 한 개, 최대 10MB. 원문은 서버가 추출하고, 올린 뒤 분석까지 이어서 진행합니다.
-          </p>
+          <p class="mi hint">PDF 한 개 · 최대 10MB</p>
 
           <label class="lbl">
             <span class="eb sm">제목</span>
@@ -264,9 +261,6 @@ onMounted(() => {
         <form class="card pad mt" @submit.prevent="onCreate">
           <div class="cardhead">
             <span class="eb">직접 입력</span>
-            <!-- 여기에 enum 값(TEXT·FILE)을 찍고 있었다. API 응답의 필드값이지
-                 사용자에게 뜻이 있는 말이 아니다 (프론트엔드-추가-요청사항 2.3). -->
-            <span class="mi srchint">원문을 붙여넣어 등록</span>
           </div>
 
           <label class="lbl">

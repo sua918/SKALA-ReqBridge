@@ -31,6 +31,22 @@ const TABS = [
 ]
 
 const activeTab = ref('customer')
+
+/**
+ * 좌우 화살표로 탭을 옮긴다. 끝에서 다음을 누르면 처음으로 돌아온다 — 탭이 둘뿐이라
+ * 되감기가 없으면 끝 탭에서 화살표가 먹통이 된 것처럼 느껴진다.
+ * 옮긴 탭에 초점도 함께 옮겨야 다음 화살표가 이어서 먹는다.
+ */
+function onTabKey(event) {
+  const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
+  if (step === 0) return
+  event.preventDefault()
+  const at = TABS.findIndex((t) => t.key === activeTab.value)
+  const next = TABS[(at + step + TABS.length) % TABS.length]
+  activeTab.value = next.key
+  const buttons = event.currentTarget.querySelectorAll('[role="tab"]')
+  buttons[TABS.indexOf(next)]?.focus()
+}
 const loading = ref(true)
 const preview = ref(null)
 
@@ -56,6 +72,18 @@ const customerEmptyNote = computed(() => {
   }
   return '지금 고객에게 물을 질문이 없습니다. 분석이 진행 중이거나 수정안 검토를 기다리는 중일 수 있습니다.'
 })
+
+/**
+ * 조회 시각. 응답은 `2026-09-03T20:29:56.911Z` 같은 ISO 문자열인데, 그대로 찍으면
+ * 사용자가 읽을 형식이 아닌 데다 UTC라 시계와 한 시간이 아니라 아홉 시간 어긋난다.
+ * 브라우저의 시간대로 옮겨 분까지만 적는다 — 초는 이 화면에서 쓸 일이 없다.
+ */
+function formatMoment(iso) {
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return iso
+  const p = (n) => String(n).padStart(2, '0')
+  return `${at.getFullYear()}-${p(at.getMonth() + 1)}-${p(at.getDate())} ${p(at.getHours())}:${p(at.getMinutes())}`
+}
 
 /** basis는 조회 시점의 버전 스냅샷이다. 어느 버전을 보고 있는지 화면에 남긴다 (Spec 6.4). */
 const basis = computed(() => preview.value?.basis ?? [])
@@ -157,11 +185,15 @@ onMounted(() => {
       <template #title>문서 미리보기</template>
       <template #subject>{{ preview?.documentTitle ?? '문서 #' + documentId }}</template>
       <template #actions>
-        <div class="tabs" role="tablist">
+        <!-- 탭은 좌우 화살표로 옮겨간다. 탭 하나만 tab 순서에 넣고(tabindex) 나머지는
+             화살표로 닿게 하는 것이 tablist의 규칙이다 — 그러지 않으면 키보드로 화면을
+             넘길 때 탭 두 개를 모두 지나야 본문에 닿는다. -->
+        <div class="tabs" role="tablist" @keydown="onTabKey">
           <button
             v-for="tab in TABS" :key="tab.key" type="button" role="tab"
             class="tab" :class="{ 'tab--on': activeTab === tab.key }"
             :aria-selected="activeTab === tab.key"
+            :tabindex="activeTab === tab.key ? 0 : -1"
             @click="activeTab = tab.key"
           >{{ tab.label }}</button>
         </div>
@@ -291,15 +323,13 @@ onMounted(() => {
              시작해야 두 기둥의 윗변이 맞는다. 라벨을 카드 머리말로 넣으면 33px 어긋난다. -->
         <SectionLabel text="조회 기준 버전" />
         <div class="card pad quiet">
-          <p class="mi note">
-            이 미리보기는 아래 버전으로 조합했습니다. 이후 답변·검토가 있었다면 다시 조회해야 합니다.
-          </p>
+          <p class="mi note">이후 답변·검토가 있었다면 다시 조회해야 합니다.</p>
           <div v-for="row in basis" :key="row.requirementId" class="brow">
             <span class="mi blabel">요구사항 #{{ sequenceOf(row.requirementId) }}</span>
             <span class="fig bver">v{{ row.contentVersion }}</span>
             <span v-if="row.approvedRevisionId" class="mi bapp">승인된 수정안</span>
           </div>
-          <p v-if="preview.generatedAt" class="mi gen">조회 시점 {{ preview.generatedAt }}</p>
+          <p v-if="preview.generatedAt" class="mi gen">조회 시점 {{ formatMoment(preview.generatedAt) }}</p>
         </div>
       </aside>
     </div>

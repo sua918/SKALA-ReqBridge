@@ -395,7 +395,6 @@ onMounted(() => {
             <StatusBadge kind="revision" value="APPROVED" />
           </div>
           <p class="source">{{ requirement.confirmedText }}</p>
-          <p class="mi hint">승인된 수정안의 본문입니다.</p>
         </div>
 
         <div class="card pad quiet journey">
@@ -511,9 +510,7 @@ onMounted(() => {
         </div>
 
         <div v-if="canRegenerate" class="card pad quiet">
-          <p class="mi hint mb12">
-            거절한 수정안이 있고 모든 문제가 해결됐습니다. 거절 사유를 반영해 다시 만들 수 있습니다.
-          </p>
+          <p class="mi hint mb12">거절 사유를 반영해 다시 만들 수 있습니다.</p>
           <PillButton variant="primary" :loading="regenerating" @click="onRegenerate">
             수정안 다시 만들기
           </PillButton>

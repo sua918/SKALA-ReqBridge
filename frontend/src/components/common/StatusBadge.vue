@@ -61,8 +61,12 @@ const tone = computed(() => resolveStatusTone(props.kind, props.value))
   background: currentColor;
 }
 
-/* 추출 완료 · 대기 — 아직 아무 일도 일어나지 않은 상태 */
-.status-badge--neutral { color: var(--gray-tx); }
+/* 진행 중인 일상 상태 — 색은 쓰지 않지만 흐리지도 않다.
+   회색 #44484F는 옆의 설명글과 무게가 같아 「미해결」이 눈에 안 걸렸다.
+   본문보다 진한 먹으로 올려, 색 없이도 또렷한 글자로 선다.
+   점은 글자보다 한 톤 옅게 두어 글자를 가리지 않는다. */
+.status-badge--neutral { color: var(--fg-700); }
+.status-badge--neutral::before { background: var(--fg-400); }
 
 /* 분석 중 · 답변됨 — 기계가 일하는 중이거나 사람의 입력이 들어온 뒤 */
 .status-badge--info { color: var(--blue-tx); }
