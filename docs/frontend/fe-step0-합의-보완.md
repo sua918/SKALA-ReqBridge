@@ -218,15 +218,97 @@ C 담당(`/requirements/:requirementId`, Preview)은 변하지 않는다.
 
 구현은 B가 반영했다. C는 내용에 동의하면 체크한다.
 
-- [ ] 4. 기본 실행은 실제 백엔드, Mock은 `npm run dev:mock`
-- [ ] 5. Mock은 서버 대역이며 API 분기는 `src/api/*`에서만
-- [ ] 5-1. 질문 미생성 → 상태는 `AMBIGUOUS`
-- [ ] 3-1. contentVersion 예외는 Mock store에 한정
-- [ ] 6. 최신 분석 기준 복원 · 완료/실패 시 버튼 정책
-- [ ] 7. poller 콜백 async 허용 및 오류 전달
-- [ ] 8. 프로젝트 생성 화면은 B 담당
-- [ ] 9. Ambiguity 상세는 C workflow, B는 건수까지
-- [ ] 10. PDF 업로드 · breadcrumb 이름 · 409 복구
-- [ ] 11. Mock 실패는 `INVALID_OUTPUT` · 재시도는 성공
-- [ ] 12. breadcrumb `documentProject` 항목
-- [ ] (전체) B Must 완료로 보고 C는 workflow·Preview만 진행
+- [x] 4. 기본 실행은 실제 백엔드, Mock은 `npm run dev:mock`
+- [x] 5. Mock은 서버 대역이며 API 분기는 `src/api/*`에서만
+- [ ] 5-1. 질문 미생성 → 상태는 `AMBIGUOUS` — **아래 C-1 참고, 재논의 요청**
+- [x] 3-1. contentVersion 예외는 Mock store에 한정
+- [x] 6. 최신 분석 기준 복원 · 완료/실패 시 버튼 정책
+- [x] 7. poller 콜백 async 허용 및 오류 전달
+- [x] 8. 프로젝트 생성 화면은 B 담당
+- [x] 9. Ambiguity 상세는 C workflow, B는 건수까지
+- [x] 10. PDF 업로드 · breadcrumb 이름 · 409 복구
+- [x] 11. Mock 실패는 `INVALID_OUTPUT` · 재시도는 성공
+- [x] 12. breadcrumb `documentProject` 항목
+- [x] (전체) B Must 완료로 보고 C는 workflow·Preview만 진행
+
+---
+
+## C 회신 (최은주)
+
+> **회신일:** 2026-09-03
+> **브랜치:** `feat/fe-c`
+> **범위:** P1 workflow (Spec 5.13~5.16) · P2 Preview (Spec 5.17~5.18) 구현 완료
+
+12개 중 11개 동의한다. 5-1만 재논의를 요청한다.
+
+### C-1. 5-1 재논의 요청 — 새 문서를 분석하면 답할 질문이 없다
+
+**동의하는 부분.** 질문(Clarification)이 workflow 범위이고, 질문이 없는 동안
+요구사항 상태가 `CLARIFYING`이 아니라 `AMBIGUOUS`라는 판단은 Spec 4.1과 맞다.
+`CLARIFYING`은 「확인 중」이므로 물어본 것이 있어야 성립한다.
+
+**문제.** 그 결과로 **새로 등록·분석한 문서의 요구사항은 workflow 화면에서 할 일이
+없다.** 문제(Issue)는 보이는데 답할 질문이 하나도 없어서, 화면이 열려도 답변 입력이
+불가능하다. Mock으로 workflow를 처음부터 시연하려면 seed 문서 101로만 가능하다.
+
+`mock-scenarios.md` 2절은 최초 분석의 저장 기대값을 이렇게 정하고 있다.
+
+- Clarification 601·602: WAITING, roundNo 1
+- Analysis 301: clarificationIds `[601, 602]`
+- Requirement 401: `EXTRACTED → AMBIGUOUS → CLARIFYING`
+
+즉 **문서 분석이 질문까지 만드는 것이 시나리오 문서의 기대값**이다.
+현재 Mock은 문서 101 seed에만 이 값이 반영돼 있고, 새로 분석한 문서에는 없다.
+
+**seed의 불일치도 함께 있었다.** `seedAnalysisCompleted.result.clarificationIds`는
+이미 `[601, 602]`를 가리키는데 정작 질문 레코드가 store에 없었다. 요구사항 401이
+`CLARIFYING`인데 답할 질문이 하나도 없는 상태였다.
+질문이 workflow 범위라 비어 있던 것이므로, C가 `fixtures.js`에 601·602를 채웠다
+(mock-scenarios 1·2절 문구 그대로). 이 부분은 B 결정과 충돌하지 않는다.
+
+**제안 (택1).**
+
+| 안 | 내용 | 영향 |
+| --- | --- | --- |
+| **A** | 문서 분석 Mock이 문제마다 roundNo 1 질문을 만들고 `CLARIFYING`으로 전환 | `store.js`의 `extractRequirements` 수정. mock-scenarios 2절과 일치. Mock 한정이며 실BE 계약은 그대로 |
+| **B** | 현행 유지 (`AMBIGUOUS`, 질문 없음) | workflow 시연은 seed 문서 101로만 가능. Mock과 시나리오 문서가 어긋난 채로 남음 |
+
+C는 **A**를 제안한다. 다만 `extractRequirements`는 B Must 영역이라
+합의 4번에 따라 임의로 바꾸지 않았다. B가 A에 동의하면 C가 PR로 반영하겠다.
+
+### C-2. 참고 — 구현하며 확인한 것들
+
+합의를 바꾸지 않은 사항이며 기록만 남긴다.
+
+1. **`src/api/` 신규 파일** — Preview는 인계서 2절의 「workflow.js와 같이 또는 별도
+   파일」 중 별도 파일을 골라 `api/previews.js`로 두었다. 두 Preview는 워크플로우를
+   진행시키지 않는 읽기 전용 조회라 성격이 다르다.
+2. **Spec 6.2 검증 순서** — 동일 요청 판정을 버전·상태 검증보다 먼저 한다.
+   버전이 이미 진행됐다는 이유만으로 정상 재전송을 실패시키지 않는다.
+3. **Spec 2.1 공백 집합** — 답변·거절 사유 정규화에 `\s`를 쓰지 않는다.
+   JS의 `\s`는 U+FEFF를 포함하고 U+0085를 빼서 서버와 「같은 답변」 판정이 갈린다.
+   명세가 고정한 집합을 그대로 문자 클래스로 적었다.
+4. **APPROVE 요청 본문** — `rejectionReason`을 아예 싣지 않는다.
+   Spec 2절이 미정의 필드를 400으로 규정한다.
+5. **`isContentVersionConflict`** — 인계서 6절 재사용 항목이라 반영했다.
+   409 전체는 workflow 재조회로 복구하고, 그중 버전 충돌만 별도 안내를 띄운다.
+   다른 409는 「지금은 안 된다」지만 버전 충돌은 「보던 화면이 낡았다」라서
+   사용자가 할 일이 다르다.
+6. **`useAnalysisPoller`의 `onComplete`에서 `clearError()`를 부르지 않았다** —
+   작업이 끝난 것과 사용자 요청이 튕긴 것은 별개인데, 방금 뜬 409 메시지까지
+   지워졌다. C 화면에서만 뺐고 공통 composable은 건드리지 않았다.
+7. **미지원 답변** — `mock-scenarios.md` 서문의 「지원하지 않는 입력을 임의 성공
+   처리하지 않는다」에 따라, 표에 없는 답변은 충분한 답변으로 처리하지 않고
+   다음 회차를 열며 문제는 OPEN으로 둔다.
+
+### C-3. 검증
+
+- `frontend/scripts/verify-workflow-mock.mjs` — 단언 123개 통과
+  (mock-scenarios 2~8절, Spec 5.13~5.18·6.4·8절)
+- `frontend/scripts/verify-analysis-poller.mjs` — 기존 4/4 회귀 통과
+- 브라우저 E2E (`npm run dev:mock`): v1 → 답변 → v2(2회차 생성) → v3 →
+  v4(수정안 701) → 거절 v5 → 재생성 702 → 승인 확정. Spec 8절 분기표 7행 일치
+- 409(`ANALYSIS_IN_PROGRESS`) 발생 시 입력 초안 보존 확인
+- `INVALID_OUTPUT` → `AI_OUTPUT_INVALID` 배너 → 재시도 성공 확인
+- Preview: 문서 상세 진입 링크 → 고객용 질문 2건 → 확정 후 개발팀용에서
+  확정본과 근거 답변 601·603·602 확인
