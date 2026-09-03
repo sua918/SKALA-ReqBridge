@@ -44,4 +44,32 @@ class MockWorkflowAnalyzerTests {
 				.isInstanceOf(AiOutputInvalidException.class)
 				.hasMessageContaining("지원하지 않는 Mock 문서");
 	}
+
+	@Test
+	void implementsWorkflowAnalyzerContract() {
+		com.sua.reqbridge.contract.ai.WorkflowAnalyzer analyzer = new MockWorkflowAnalyzer();
+
+		assertThat(analyzer.adapterType()).isEqualTo(com.sua.reqbridge.contract.AnalysisAdapterType.MOCK);
+		assertThat(analyzer.schemaVersion()).isEqualTo("1.0.0");
+
+		var docResult = analyzer.analyzeDocument(new com.sua.reqbridge.contract.ai.DocumentAnalysisInput(1L, CONTENT));
+		assertThat(docResult.requirements()).hasSize(1);
+		assertThat(docResult.requirements().getFirst().issues()).hasSize(2);
+
+		var sufficientAssessment = analyzer.assessAnswer(new com.sua.reqbridge.contract.ai.AnswerAssessmentInput(
+				100L, 1L, CONTENT, com.sua.reqbridge.contract.AmbiguityType.QUANTITY_MISSING, "근거",
+				10L, 20L, 1, "질문", "최대 동시 사용자 3,000명입니다.", java.util.List.of()));
+		assertThat(sufficientAssessment.sufficient()).isTrue();
+		assertThat(sufficientAssessment.nextQuestionText()).isNull();
+
+		var insufficientAssessment = analyzer.assessAnswer(new com.sua.reqbridge.contract.ai.AnswerAssessmentInput(
+				100L, 1L, CONTENT, com.sua.reqbridge.contract.AmbiguityType.QUANTITY_MISSING, "근거",
+				10L, 20L, 1, "질문", "많이 접속할 것 같습니다.", java.util.List.of()));
+		assertThat(insufficientAssessment.sufficient()).isFalse();
+		assertThat(insufficientAssessment.nextQuestionText()).isNotNull();
+
+		var proposal = analyzer.generateRevision(new com.sua.reqbridge.contract.ai.RevisionGenerationInput(
+				100L, CONTENT, java.util.List.of(), null));
+		assertThat(proposal.proposedText()).isEqualTo(MockWorkflowAnalyzer.PROPOSED_TEXT);
+	}
 }

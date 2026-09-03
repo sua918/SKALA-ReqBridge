@@ -1,7 +1,7 @@
 package com.sua.reqbridge.analysis;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,8 +22,8 @@ import tools.jackson.databind.ObjectMapper;
 public class AnalysisConfiguration {
 
 	@Bean
+	@ConditionalOnProperty(name = "reqbridge.ai.provider", havingValue = "mock", matchIfMissing = true)
 	@ConditionalOnBean(CoreRequirementPort.class)
-	@ConditionalOnMissingBean(WorkflowAnalyzer.class)
 	WorkflowAnalyzer mockWorkflowAnalyzer() {
 		return new MockWorkflowAnalyzer();
 	}

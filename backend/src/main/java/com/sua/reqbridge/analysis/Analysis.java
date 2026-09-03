@@ -103,15 +103,12 @@ public class Analysis {
 		this.inputContentVersion = inputContentVersion;
 		this.inputSnapshot = Objects.requireNonNull(inputSnapshot);
 		this.adapterType = Objects.requireNonNull(adapterType);
-		if (schemaVersion == null || schemaVersion.isBlank() || schemaVersion.length() > 50) {
-			throw new IllegalArgumentException("schemaVersion은 1~50자여야 합니다.");
-		}
-		this.schemaVersion = schemaVersion;
+		this.schemaVersion = Objects.requireNonNull(schemaVersion);
 		this.createdAt = Instant.now();
 	}
 
 	public static Analysis pendingDocument(long documentId, String inputSnapshot) {
-		return new Analysis(AnalysisKind.DOCUMENT, documentId, null, null, null, inputSnapshot);
+		return pendingDocument(documentId, inputSnapshot, AnalysisAdapterType.MOCK, "1.0.0");
 	}
 
 	public static Analysis pendingDocument(long documentId, String inputSnapshot,
@@ -122,29 +119,38 @@ public class Analysis {
 
 	public static Analysis pendingAnswer(long documentId, long requirementId,
 			long clarificationId, long inputContentVersion, String inputSnapshot) {
-		return new Analysis(AnalysisKind.ANSWER, documentId, requirementId,
-				clarificationId, inputContentVersion, inputSnapshot);
+		return pendingAnswer(documentId, requirementId, clarificationId, inputContentVersion,
+				inputSnapshot, AnalysisAdapterType.MOCK, "1.0.0");
 	}
 
-	public static Analysis pendingAnswer(long documentId, long requirementId, long clarificationId,
-			long inputContentVersion, String inputSnapshot, AnalysisAdapterType adapterType, String schemaVersion) {
-		return new Analysis(AnalysisKind.ANSWER, documentId, requirementId, clarificationId,
-				inputContentVersion, inputSnapshot, adapterType, schemaVersion);
+	public static Analysis pendingAnswer(long documentId, long requirementId,
+			long clarificationId, long inputContentVersion, String inputSnapshot,
+			AnalysisAdapterType adapterType, String schemaVersion) {
+		return new Analysis(AnalysisKind.ANSWER, documentId, requirementId,
+				clarificationId, inputContentVersion, inputSnapshot, adapterType, schemaVersion);
 	}
 
 	public static Analysis pendingRevision(long documentId, long requirementId,
 			long inputContentVersion, String inputSnapshot) {
-		return new Analysis(AnalysisKind.REVISION, documentId, requirementId,
-				null, inputContentVersion, inputSnapshot);
+		return pendingRevision(documentId, requirementId, inputContentVersion,
+				inputSnapshot, AnalysisAdapterType.MOCK, "1.0.0");
 	}
 
-	public static Analysis pendingRevision(long documentId, long requirementId, long inputContentVersion,
-			String inputSnapshot, AnalysisAdapterType adapterType, String schemaVersion) {
-		return new Analysis(AnalysisKind.REVISION, documentId, requirementId, null,
-				inputContentVersion, inputSnapshot, adapterType, schemaVersion);
+	public static Analysis pendingRevision(long documentId, long requirementId,
+			long inputContentVersion, String inputSnapshot,
+			AnalysisAdapterType adapterType, String schemaVersion) {
+		return new Analysis(AnalysisKind.REVISION, documentId, requirementId,
+				null, inputContentVersion, inputSnapshot, adapterType, schemaVersion);
 	}
 
 	public static Analysis retry(Analysis failedAnalysis) {
+		if (failedAnalysis == null) {
+			throw new IllegalArgumentException("재시도할 대상 분석 작업이 필요합니다.");
+		}
+		return retry(failedAnalysis, failedAnalysis.getAdapterType(), failedAnalysis.getSchemaVersion());
+	}
+
+	public static Analysis retry(Analysis failedAnalysis, AnalysisAdapterType adapterType, String schemaVersion) {
 		if (failedAnalysis == null) {
 			throw new IllegalArgumentException("재시도할 대상 분석 작업이 필요합니다.");
 		}
@@ -154,7 +160,7 @@ public class Analysis {
 		Analysis retried = new Analysis(failedAnalysis.getKind(), failedAnalysis.getDocumentId(),
 				failedAnalysis.getRequirementId(), failedAnalysis.getClarificationId(),
 				failedAnalysis.getInputContentVersion(), failedAnalysis.getInputSnapshot(),
-				failedAnalysis.getAdapterType(), failedAnalysis.getSchemaVersion());
+				Objects.requireNonNull(adapterType), Objects.requireNonNull(schemaVersion));
 		retried.retryOfAnalysisId = failedAnalysis.getId();
 		return retried;
 	}

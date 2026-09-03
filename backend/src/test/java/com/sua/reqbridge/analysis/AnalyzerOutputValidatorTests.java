@@ -1,80 +1,207 @@
 package com.sua.reqbridge.analysis;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Stream;
 
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
 
 import com.sua.reqbridge.contract.AmbiguityType;
-import com.sua.reqbridge.contract.ai.AnalyzerTypes.*;
+import com.sua.reqbridge.contract.ai.AnswerAssessment;
+import com.sua.reqbridge.contract.ai.DocumentAnalysisResult;
+import com.sua.reqbridge.contract.ai.IssueCandidate;
+import com.sua.reqbridge.contract.ai.RequirementCandidate;
+import com.sua.reqbridge.contract.ai.RevisionProposal;
 
 class AnalyzerOutputValidatorTests {
 
-	@ParameterizedTest
-	@MethodSource("invalidDocuments")
-	void rejectsMalformedDocumentOutput(DocumentResult output) {
-		assertThatThrownBy(() -> AnalyzerOutputValidator.document(output))
-				.isInstanceOf(AiOutputInvalidException.class)
-				.hasMessage("분석 결과 형식이 올바르지 않습니다.");
+	@Nested
+	@DisplayName("문서 분석 결과 검증")
+	class DocumentResultValidation {
+
+		@Test
+		void rejectsNullOutput() {
+			assertThatThrownBy(() -> AnalyzerOutputValidator.validateDocumentResult(null))
+					.isInstanceOf(AiOutputInvalidException.class)
+					.hasMessageContaining("분석 결과가 비어 있습니다.");
+		}
+
+		@Test
+		void rejectsEmptyRequirements() {
+			assertThatThrownBy(() -> AnalyzerOutputValidator.validateDocumentResult(
+					new DocumentAnalysisResult(List.of())))
+					.isInstanceOf(AiOutputInvalidException.class)
+					.hasMessageContaining("추출된 요구사항이 없습니다.");
+		}
+
+		@Test
+		void rejectsNullCandidate() {
+			assertThatThrownBy(() -> AnalyzerOutputValidator.validateDocumentResult(
+					new DocumentAnalysisResult(java.util.Collections.singletonList(null))))
+					.isInstanceOf(AiOutputInvalidException.class)
+					.hasMessageContaining("요구사항 후보가 null입니다.");
+		}
+
+		@Test
+		void rejectsInvalidSequenceNo() {
+			var candidate = new RequirementCandidate(0, "원문", List.of());
+			assertThatThrownBy(() -> AnalyzerOutputValidator.validateDocumentResult(
+					new DocumentAnalysisResult(List.of(candidate))))
+					.isInstanceOf(AiOutputInvalidException.class)
+					.hasMessageContaining("순번은 1 이상이어야 합니다");
+		}
+
+		@Test
+		void rejectsDuplicateSequenceNo() {
+			var c1 = new RequirementCandidate(1, "원문 1", List.of());
+			var c2 = new RequirementCandidate(1, "원문 2", List.of());
+			assertThatThrownBy(() -> AnalyzerOutputValidator.validateDocumentResult(
+					new DocumentAnalysisResult(List.of(c1, c2))))
+					.isInstanceOf(AiOutputInvalidException.class)
+					.hasMessageContaining("중복된 요구사항 순번");
+		}
+
+		@Test
+		void rejectsBlankOriginalText() {
+			var candidate = new RequirementCandidate(1, "   ", List.of());
+			assertThatThrownBy(() -> AnalyzerOutputValidator.validateDocumentResult(
+					new DocumentAnalysisResult(List.of(candidate))))
+					.isInstanceOf(AiOutputInvalidException.class)
+					.hasMessageContaining("원문이 비어 있습니다.");
+		}
+
+		@Test
+		void rejectsNullIssueCandidate() {
+			var candidate = new RequirementCandidate(1, "원문", java.util.Collections.singletonList(null));
+			assertThatThrownBy(() -> AnalyzerOutputValidator.validateDocumentResult(
+					new DocumentAnalysisResult(List.of(candidate))))
+					.isInstanceOf(AiOutputInvalidException.class)
+					.hasMessageContaining("이슈 후보가 null입니다.");
+		}
+
+		@Test
+		void rejectsNullIssueType() {
+			var issue = new IssueCandidate(null, "근거", "질문");
+			var candidate = new RequirementCandidate(1, "원문", List.of(issue));
+			assertThatThrownBy(() -> AnalyzerOutputValidator.validateDocumentResult(
+					new DocumentAnalysisResult(List.of(candidate))))
+					.isInstanceOf(AiOutputInvalidException.class)
+					.hasMessageContaining("이슈 유형");
+		}
+
+		@Test
+		void rejectsBlankIssueEvidence() {
+			var issue = new IssueCandidate(AmbiguityType.QUANTITY_MISSING, "  ", "질문");
+			var candidate = new RequirementCandidate(1, "원문", List.of(issue));
+			assertThatThrownBy(() -> AnalyzerOutputValidator.validateDocumentResult(
+					new DocumentAnalysisResult(List.of(candidate))))
+					.isInstanceOf(AiOutputInvalidException.class)
+					.hasMessageContaining("근거가 비어 있습니다.");
+		}
+
+		@Test
+		void rejectsBlankQuestionText() {
+			var issue = new IssueCandidate(AmbiguityType.QUANTITY_MISSING, "근거", "");
+			var candidate = new RequirementCandidate(1, "원문", List.of(issue));
+			assertThatThrownBy(() -> AnalyzerOutputValidator.validateDocumentResult(
+					new DocumentAnalysisResult(List.of(candidate))))
+					.isInstanceOf(AiOutputInvalidException.class)
+					.hasMessageContaining("질문 문구가 비어 있습니다.");
+		}
+
+		@Test
+		void acceptsValidDocumentResult() {
+			var issue = new IssueCandidate(AmbiguityType.QUANTITY_MISSING, "근거", "질문?");
+			var candidate = new RequirementCandidate(1, "원문", List.of(issue));
+			assertThatCode(() -> AnalyzerOutputValidator.validateDocumentResult(
+					new DocumentAnalysisResult(List.of(candidate))))
+					.doesNotThrowAnyException();
+		}
 	}
 
-	static Stream<DocumentResult> invalidDocuments() {
-		return Stream.of(null, new DocumentResult(null), new DocumentResult(List.of()),
-				new DocumentResult(Arrays.asList((RequirementCandidate) null)),
-				new DocumentResult(List.of(new RequirementCandidate(0, "원문", List.of()))),
-				new DocumentResult(List.of(new RequirementCandidate(2, "원문", List.of()))),
-				new DocumentResult(List.of(new RequirementCandidate(1, "원문", List.of()),
-						new RequirementCandidate(1, "원문", List.of()))),
-				new DocumentResult(List.of(new RequirementCandidate(1, "\uFEFF\u3000", List.of()))),
-				new DocumentResult(List.of(new RequirementCandidate(1, "원문", null))),
-				documentWithIssue(null),
-				documentWithIssue(new IssueCandidate(null, "근거", "질문")),
-				documentWithIssue(new IssueCandidate(AmbiguityType.TERM_AMBIGUOUS, " ", "질문")),
-				documentWithIssue(new IssueCandidate(AmbiguityType.TERM_AMBIGUOUS, "근거", null)));
+	@Nested
+	@DisplayName("답변 판정 결과 검증")
+	class AnswerAssessmentValidation {
+
+		@Test
+		void rejectsNullAssessment() {
+			assertThatThrownBy(() -> AnalyzerOutputValidator.validateAnswerAssessment(null))
+					.isInstanceOf(AiOutputInvalidException.class)
+					.hasMessageContaining("답변 판정 결과가 비어 있습니다.");
+		}
+
+		@Test
+		void rejectsBlankReason() {
+			assertThatThrownBy(() -> AnalyzerOutputValidator.validateAnswerAssessment(
+					new AnswerAssessment(true, "  ", null)))
+					.isInstanceOf(AiOutputInvalidException.class)
+					.hasMessageContaining("답변 판정 사유가 비어 있습니다.");
+		}
+
+		@Test
+		void rejectsInsufficientWithoutNextQuestion() {
+			assertThatThrownBy(() -> AnalyzerOutputValidator.validateAnswerAssessment(
+					new AnswerAssessment(false, "사유", "   ")))
+					.isInstanceOf(AiOutputInvalidException.class)
+					.hasMessageContaining("후속 질문이 필요합니다.");
+		}
+
+		@Test
+		void rejectsSufficientWithNextQuestion() {
+			assertThatThrownBy(() -> AnalyzerOutputValidator.validateAnswerAssessment(
+					new AnswerAssessment(true, "사유", "불필요한 후속 질문")))
+					.isInstanceOf(AiOutputInvalidException.class)
+					.hasMessageContaining("충분한 답변 판정 시 후속 질문이 존재할 수 없습니다.");
+		}
+
+		@Test
+		void acceptsValidAssessments() {
+			assertThatCode(() -> AnalyzerOutputValidator.validateAnswerAssessment(
+					new AnswerAssessment(true, "정상 확인", null)))
+					.doesNotThrowAnyException();
+
+			assertThatCode(() -> AnalyzerOutputValidator.validateAnswerAssessment(
+					new AnswerAssessment(false, "숫자 필요", "얼마인가요?")))
+					.doesNotThrowAnyException();
+		}
 	}
 
-	private static DocumentResult documentWithIssue(IssueCandidate issue) {
-		return new DocumentResult(List.of(new RequirementCandidate(1, "원문", Arrays.asList(issue))));
-	}
+	@Nested
+	@DisplayName("수정안 생성 결과 검증")
+	class RevisionProposalValidation {
 
-	@ParameterizedTest
-	@MethodSource("invalidAssessments")
-	void rejectsMalformedAssessment(Assessment output) {
-		assertThatThrownBy(() -> AnalyzerOutputValidator.assessment(output))
-				.isInstanceOf(AiOutputInvalidException.class);
-	}
+		@Test
+		void rejectsNullProposal() {
+			assertThatThrownBy(() -> AnalyzerOutputValidator.validateRevisionProposal(null))
+					.isInstanceOf(AiOutputInvalidException.class)
+					.hasMessageContaining("수정안 생성 결과가 비어 있습니다.");
+		}
 
-	static Stream<Assessment> invalidAssessments() {
-		return Stream.of(null, new Assessment(true, null, null), new Assessment(false, "근거", null),
-				new Assessment(false, "근거", "\uFEFF"), new Assessment(true, "근거", "추가 질문"));
-	}
+		@Test
+		void rejectsBlankProposedText() {
+			assertThatThrownBy(() -> AnalyzerOutputValidator.validateRevisionProposal(
+					new RevisionProposal("   ")))
+					.isInstanceOf(AiOutputInvalidException.class)
+					.hasMessageContaining("수정안 문구가 비어 있습니다.");
+		}
 
-	@ParameterizedTest
-	@MethodSource("invalidRevisions")
-	void rejectsMalformedRevision(RevisionProposal output) {
-		assertThatThrownBy(() -> AnalyzerOutputValidator.revision(output))
-				.isInstanceOf(AiOutputInvalidException.class);
-	}
+		@Test
+		void rejectsExcessivelyLongProposedText() {
+			String tooLong = "A".repeat(20_001);
+			assertThatThrownBy(() -> AnalyzerOutputValidator.validateRevisionProposal(
+					new RevisionProposal(tooLong)))
+					.isInstanceOf(AiOutputInvalidException.class)
+					.hasMessageContaining("길이가 허용 한도를 초과");
+		}
 
-	static Stream<RevisionProposal> invalidRevisions() {
-		return Stream.of(null, new RevisionProposal(null), new RevisionProposal("\u0085\uFEFF"),
-				new RevisionProposal("a".repeat(100_001)));
-	}
-
-	@Test
-	void acceptsValidOutputsAndPreservesOriginalTextAndUnorderedContiguousNumbers() {
-		var output = new DocumentResult(List.of(new RequirementCandidate(2, "두 번째", List.of()),
-				new RequirementCandidate(1, "  원문\n", List.of())));
-		assertThat(AnalyzerOutputValidator.document(output)).isSameAs(output);
-		assertThat(AnalyzerOutputValidator.revision(new RevisionProposal("😀".repeat(100_000))).text())
-				.hasSize(200_000);
-		assertThat(AnalyzerOutputValidator.assessment(new Assessment(false, "불충분", "다음 질문")))
-				.isEqualTo(new Assessment(false, "불충분", "다음 질문"));
+		@Test
+		void acceptsValidProposal() {
+			assertThatCode(() -> AnalyzerOutputValidator.validateRevisionProposal(
+					new RevisionProposal("시스템은 정상 동작해야 한다.")))
+					.doesNotThrowAnyException();
+		}
 	}
 }

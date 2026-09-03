@@ -24,7 +24,6 @@ import com.sua.reqbridge.analysis.AiOutputInvalidException;
 import com.sua.reqbridge.analysis.Analysis;
 import com.sua.reqbridge.analysis.AnalysisRepository;
 import com.sua.reqbridge.analysis.DocumentAnalysisService;
-import com.sua.reqbridge.analysis.MockWorkflowAnalyzer;
 import com.sua.reqbridge.clarification.Clarification;
 import com.sua.reqbridge.clarification.ClarificationRepository;
 import com.sua.reqbridge.contract.AnalysisKind;
@@ -59,7 +58,7 @@ class RevisionWorkflowServiceTests {
 		events = mock(ApplicationEventPublisher.class);
 		json = new ObjectMapper();
 		service = new RevisionWorkflowService(analyses, issues, clarifications, revisions, core, events,
-				new MockWorkflowAnalyzer(), json);
+				new com.sua.reqbridge.analysis.MockWorkflowAnalyzer(), json);
 	}
 
 	@Test
@@ -179,10 +178,7 @@ class RevisionWorkflowServiceTests {
 
 	@Test
 	void executeRevisionCreatesProposedRevisionAndTransitionsToInReview() {
-		Analysis analysis = Analysis.pendingRevision(101, 401, 5,
-				json.writeValueAsString(new RevisionWorkflowService.RevisionInput(401, 101, 5, "수정 사유")));
-		when(core.lockRequirement(401L)).thenReturn(new RequirementSnapshot(
-				401, 101, 301, 1, "원문", RequirementStatus.CLARIFYING, 5, null, null));
+		Analysis analysis = Analysis.pendingRevision(101, 401, 5, "{}");
 		ReflectionTestUtils.setField(analysis, "id", 307L);
 		when(analyses.findById(307L)).thenReturn(Optional.of(analysis));
 

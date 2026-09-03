@@ -1,15 +1,12 @@
 package com.sua.reqbridge.contract.ai;
 
 import com.sua.reqbridge.contract.AnalysisAdapterType;
-import com.sua.reqbridge.contract.DocumentSnapshot;
-import com.sua.reqbridge.contract.ai.AnalyzerTypes.*;
 
-/** Produces proposals only. Persistence, versions and human approval belong to the workflow. */
 public interface WorkflowAnalyzer {
 
-	DocumentResult analyze(DocumentSnapshot document);
+	DocumentAnalysisResult analyzeDocument(DocumentAnalysisInput input);
 
-	Assessment assess(AnswerAssessmentInput input);
+	AnswerAssessment assessAnswer(AnswerAssessmentInput input);
 
 	RevisionProposal generateRevision(RevisionGenerationInput input);
 

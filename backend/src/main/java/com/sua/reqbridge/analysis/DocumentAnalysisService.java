@@ -20,10 +20,11 @@ import com.sua.reqbridge.contract.RequirementSnapshot;
 import com.sua.reqbridge.contract.RequirementStatus;
 import com.sua.reqbridge.contract.ResourceNotFoundException;
 import com.sua.reqbridge.contract.StateConflictException;
+import com.sua.reqbridge.contract.ai.DocumentAnalysisInput;
+import com.sua.reqbridge.contract.ai.DocumentAnalysisResult;
+import com.sua.reqbridge.contract.ai.IssueCandidate;
+import com.sua.reqbridge.contract.ai.RequirementCandidate;
 import com.sua.reqbridge.contract.ai.WorkflowAnalyzer;
-import com.sua.reqbridge.contract.ai.AnalyzerTypes.DocumentResult;
-import com.sua.reqbridge.contract.ai.AnalyzerTypes.RequirementCandidate;
-import com.sua.reqbridge.contract.ai.AnalyzerTypes.IssueCandidate;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -79,15 +80,11 @@ public class DocumentAnalysisService {
 	@Transactional
 	public void executeDocument(long analysisId) {
 		Analysis analysis = get(analysisId);
-		AnalyzerOutputValidator.requireMatchingAdapter(analysis, analyzer);
 		analysis.start(Instant.now());
 		DocumentSnapshot document = core.getDocument(analysis.getDocumentId());
-		DocumentInput input = json.readValue(analysis.getInputSnapshot(), DocumentInput.class);
-		if (input.documentId() != document.id()) {
-			throw new IllegalStateException("분석 입력의 문서 ID가 일치하지 않습니다.");
-		}
-		DocumentResult output = AnalyzerOutputValidator.document(analyzer.analyze(new DocumentSnapshot(
-				document.id(), document.projectId(), document.title(), input.content(), input.sourceType())));
+		DocumentAnalysisResult output = analyzer.analyzeDocument(
+				new DocumentAnalysisInput(document.id(), document.content()));
+		AnalyzerOutputValidator.validateDocumentResult(output);
 		List<RequirementSnapshot> created = core.createRequirements(document.id(), analysisId,
 				output.requirements().stream()
 						.map(item -> new RequirementSeed(item.sequenceNo(), item.originalText()))
@@ -175,7 +172,7 @@ public class DocumentAnalysisService {
 			}
 		}
 
-		Analysis retryAnalysis = analyses.save(Analysis.retry(original));
+		Analysis retryAnalysis = analyses.save(Analysis.retry(original, analyzer.adapterType(), analyzer.schemaVersion()));
 		switch (retryAnalysis.getKind()) {
 			case DOCUMENT -> events.publishEvent(new DocumentAnalysisRequested(retryAnalysis.getId()));
 			case ANSWER -> events.publishEvent(new AnswerAnalysisRequested(retryAnalysis.getId()));

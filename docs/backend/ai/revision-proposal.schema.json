@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RevisionProposalResult",
+  "description": "ReqBridge LLM 수정안 생성 결과 스키마 (schemaVersion: 1.0.0)",
+  "type": "object",
+  "required": ["proposedText"],
+  "properties": {
+    "proposedText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20000,
+      "description": "고객 답변 및 거절 사유를 반영하여 모호성이 해소된 최종 제안 수정안 본문"
+    }
+  },
+  "additionalProperties": false
+}

@@ -9,12 +9,11 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.sua.reqbridge.ambiguity.AmbiguityIssueRepository;
+import com.sua.reqbridge.analysis.AiOutputInvalidException;
+import com.sua.reqbridge.analysis.AnalyzerOutputValidator;
 import com.sua.reqbridge.analysis.Analysis;
 import com.sua.reqbridge.analysis.AnalysisRepository;
-import com.sua.reqbridge.analysis.AnalyzerInputs;
-import com.sua.reqbridge.analysis.AnalyzerOutputValidator;
-import com.sua.reqbridge.contract.ai.WorkflowAnalyzer;
-import com.sua.reqbridge.contract.ai.AnalyzerTypes.RevisionGenerationInput;
+import com.sua.reqbridge.clarification.Clarification;
 import com.sua.reqbridge.clarification.ClarificationRepository;
 import com.sua.reqbridge.contract.AnalysisStatus;
 import com.sua.reqbridge.contract.CoreRequirementPort;
@@ -24,6 +23,10 @@ import com.sua.reqbridge.contract.RequirementStatus;
 import com.sua.reqbridge.contract.ResourceNotFoundException;
 import com.sua.reqbridge.contract.RevisionStatus;
 import com.sua.reqbridge.contract.StateConflictException;
+import com.sua.reqbridge.contract.ai.RevisionGenerationInput;
+import com.sua.reqbridge.contract.ai.RevisionGenerationInput.ClarificationContext;
+import com.sua.reqbridge.contract.ai.RevisionProposal;
+import com.sua.reqbridge.contract.ai.WorkflowAnalyzer;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -47,7 +50,8 @@ public class RevisionWorkflowService {
 
 	public RevisionWorkflowService(AnalysisRepository analyses, AmbiguityIssueRepository issues,
 			ClarificationRepository clarifications, RequirementRevisionRepository revisions,
-			CoreRequirementPort core, ApplicationEventPublisher events, WorkflowAnalyzer analyzer, ObjectMapper json) {
+			CoreRequirementPort core, ApplicationEventPublisher events,
+			WorkflowAnalyzer analyzer, ObjectMapper json) {
 		this.analyses = analyses;
 		this.issues = issues;
 		this.clarifications = clarifications;
@@ -93,8 +97,19 @@ public class RevisionWorkflowService {
 				.findFirst()
 				.orElse(null);
 
-		String inputSnapshot = json.writeValueAsString(new RevisionInput(
-				requirementId, requirement.documentId(), expectedVersion, latestRejectionReason));
+		List<Clarification> answeredClarifications = clarifications
+				.findByRequirementIdOrderByIssueIdAscRoundNoAsc(requirementId).stream()
+				.filter(item -> item.getAnswerText() != null)
+				.toList();
+		List<ClarificationContext> contexts = answeredClarifications.stream()
+				.map(item -> new ClarificationContext(
+						item.getId(), item.getIssueId(), item.getQuestionText(), item.getAnswerText()))
+				.toList();
+		String originalText = requirement.originalText() != null ? requirement.originalText() : "";
+
+		RevisionGenerationInput revisionInput = new RevisionGenerationInput(
+				requirementId, originalText, contexts, latestRejectionReason);
+		String inputSnapshot = json.writeValueAsString(revisionInput);
 
 		Analysis analysis = analyses.save(Analysis.pendingRevision(
 				requirement.documentId(), requirementId, expectedVersion, inputSnapshot,
@@ -107,29 +122,42 @@ public class RevisionWorkflowService {
 	public void executeRevision(long analysisId) {
 		Analysis analysis = analyses.findById(analysisId)
 				.orElseThrow(() -> new ResourceNotFoundException("분석 작업을 찾을 수 없습니다."));
-		AnalyzerOutputValidator.requireMatchingAdapter(analysis, analyzer);
 		analysis.start(Instant.now());
 		long requirementId = analysis.getRequirementId();
-		RequirementSnapshot requirement = core.lockRequirement(requirementId);
-		AnalyzerInputs.requireCurrentVersion(analysis, requirement);
-		RevisionInput input = json.readValue(analysis.getInputSnapshot(), RevisionInput.class);
-		if (input.requirementId() != requirementId || input.documentId() != requirement.documentId()
-				|| input.contentVersion() != requirement.contentVersion()) {
-			throw new IllegalStateException("수정안 입력의 요구사항 또는 버전이 일치하지 않습니다.");
-		}
 		int revisionNo = revisions.findTopByRequirementIdOrderByRevisionNoDesc(requirementId)
 				.map(RequirementRevision::getRevisionNo).orElse(0) + 1;
-		var answers = AnalyzerInputs.answers(
-				clarifications.findByRequirementIdOrderByIssueIdAscRoundNoAsc(requirementId));
-		String previousText = revisions.findByRequirementIdOrderByRevisionNoDesc(requirementId).stream()
-				.filter(item -> item.getStatus() == RevisionStatus.REJECTED)
-				.map(RequirementRevision::getText).findFirst().orElse(null);
-		var proposal = AnalyzerOutputValidator.revision(analyzer.generateRevision(new RevisionGenerationInput(
-				requirementId, requirement.originalText(), requirement.contentVersion(),
-				answers, previousText, input.rejectionReason())));
-		List<Long> evidenceIds = answers.stream().map(item -> item.clarificationId()).toList();
+
+		RevisionGenerationInput input;
+		try {
+			input = json.readValue(analysis.getInputSnapshot(), RevisionGenerationInput.class);
+		}
+		catch (Exception e) {
+			List<Clarification> answeredClarifications = clarifications
+					.findByRequirementIdOrderByIssueIdAscRoundNoAsc(requirementId).stream()
+					.filter(item -> item.getAnswerText() != null)
+					.toList();
+			RequirementSnapshot requirement = core.getRequirement(requirementId);
+			String originalText = requirement != null ? requirement.originalText() : "";
+			List<ClarificationContext> contexts = answeredClarifications.stream()
+					.map(item -> new ClarificationContext(
+							item.getId(), item.getIssueId(), item.getQuestionText(), item.getAnswerText()))
+					.toList();
+			String latestRejectionReason = revisions.findByRequirementIdOrderByRevisionNoDesc(requirementId).stream()
+					.filter(r -> r.getStatus() == RevisionStatus.REJECTED)
+					.map(RequirementRevision::getRejectionReason)
+					.findFirst()
+					.orElse(null);
+			input = new RevisionGenerationInput(requirementId, originalText, contexts, latestRejectionReason);
+		}
+
+		List<Long> evidenceIds = input.clarifications().stream()
+				.map(ClarificationContext::clarificationId)
+				.toList();
+
+		RevisionProposal proposal = analyzer.generateRevision(input);
+		AnalyzerOutputValidator.validateRevisionProposal(proposal);
 		RequirementRevision revision = revisions.save(RequirementRevision.proposed(
-				requirementId, revisionNo, proposal.text(), analysis.getInputContentVersion(), evidenceIds));
+				requirementId, revisionNo, proposal.proposedText(), analysis.getInputContentVersion(), evidenceIds));
 		core.changeStatus(requirementId, analysis.getInputContentVersion(), RequirementStatus.IN_REVIEW);
 		analysis.complete(json.writeValueAsString(new AnalysisResult(
 				List.of(requirementId), List.of(), List.of(), List.of(revision.getId()), null)), Instant.now());

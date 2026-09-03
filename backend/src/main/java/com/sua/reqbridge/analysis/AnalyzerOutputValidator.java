@@ -2,78 +2,89 @@ package com.sua.reqbridge.analysis;
 
 import java.util.HashSet;
 import java.util.Set;
-import com.sua.reqbridge.common.validation.TextRules;
-import com.sua.reqbridge.contract.ai.AnalyzerTypes.*;
-import com.sua.reqbridge.contract.ai.WorkflowAnalyzer;
 
-/** Validate every candidate before persistence; never expose raw provider output in errors. */
+import com.sua.reqbridge.contract.ai.AnswerAssessment;
+import com.sua.reqbridge.contract.ai.DocumentAnalysisResult;
+import com.sua.reqbridge.contract.ai.IssueCandidate;
+import com.sua.reqbridge.contract.ai.RequirementCandidate;
+import com.sua.reqbridge.contract.ai.RevisionProposal;
+
 public final class AnalyzerOutputValidator {
+
+	private static final int MAX_PROPOSED_TEXT_LENGTH = 20_000;
 
 	private AnalyzerOutputValidator() {
 	}
 
-	public static DocumentResult document(DocumentResult result) {
-		if (result == null || result.requirements() == null || result.requirements().isEmpty()) {
-			throw invalid();
+	public static void validateDocumentResult(DocumentAnalysisResult output) {
+		if (output == null) {
+			throw new AiOutputInvalidException("분석 결과가 비어 있습니다.");
 		}
-		Set<Integer> sequences = new HashSet<>();
-		for (RequirementCandidate requirement : result.requirements()) {
-			if (requirement == null || requirement.sequenceNo() < 1
-					|| requirement.sequenceNo() > result.requirements().size()
-					|| !sequences.add(requirement.sequenceNo())
-					|| requirement.issues() == null) {
-				throw invalid();
+		if (output.requirements() == null || output.requirements().isEmpty()) {
+			throw new AiOutputInvalidException("분석기에서 추출된 요구사항이 없습니다.");
+		}
+		Set<Integer> sequenceNos = new HashSet<>();
+		for (RequirementCandidate candidate : output.requirements()) {
+			if (candidate == null) {
+				throw new AiOutputInvalidException("요구사항 후보가 null입니다.");
 			}
-			text(requirement.originalText(), 100_000);
-			for (IssueCandidate issue : requirement.issues()) {
-				if (issue == null || issue.type() == null) {
-					throw invalid();
+			if (candidate.sequenceNo() < 1) {
+				throw new AiOutputInvalidException("요구사항 순번은 1 이상이어야 합니다: " + candidate.sequenceNo());
+			}
+			if (!sequenceNos.add(candidate.sequenceNo())) {
+				throw new AiOutputInvalidException("중복된 요구사항 순번입니다: " + candidate.sequenceNo());
+			}
+			if (candidate.originalText() == null || candidate.originalText().isBlank()) {
+				throw new AiOutputInvalidException("요구사항 원문이 비어 있습니다.");
+			}
+			if (candidate.issues() == null) {
+				throw new AiOutputInvalidException("이슈 목록이 null입니다.");
+			}
+			for (IssueCandidate issue : candidate.issues()) {
+				if (issue == null) {
+					throw new AiOutputInvalidException("이슈 후보가 null입니다.");
 				}
-				text(issue.evidence(), 100_000);
-				text(issue.questionText(), 100_000);
+				if (issue.type() == null) {
+					throw new AiOutputInvalidException("이슈 유형(AmbiguityType)이 지정되지 않았습니다.");
+				}
+				if (issue.evidence() == null || issue.evidence().isBlank()) {
+					throw new AiOutputInvalidException("이슈 근거가 비어 있습니다.");
+				}
+				if (issue.questionText() == null || issue.questionText().isBlank()) {
+					throw new AiOutputInvalidException("확인 질문 문구가 비어 있습니다.");
+				}
 			}
 		}
-		return result;
 	}
 
-	public static Assessment assessment(Assessment result) {
-		if (result == null) {
-			throw invalid();
+	public static void validateAnswerAssessment(AnswerAssessment assessment) {
+		if (assessment == null) {
+			throw new AiOutputInvalidException("답변 판정 결과가 비어 있습니다.");
 		}
-		text(result.reason(), 100_000);
-		if (!result.sufficient()) {
-			text(result.nextQuestionText(), 100_000);
-		} else if (result.nextQuestionText() != null) {
-			throw invalid();
+		if (assessment.reason() == null || assessment.reason().isBlank()) {
+			throw new AiOutputInvalidException("답변 판정 사유가 비어 있습니다.");
 		}
-		return result;
-	}
-
-	public static RevisionProposal revision(RevisionProposal result) {
-		if (result == null) {
-			throw invalid();
+		if (!assessment.sufficient()) {
+			if (assessment.nextQuestionText() == null || assessment.nextQuestionText().isBlank()) {
+				throw new AiOutputInvalidException("불충분한 답변 판정 시 후속 질문이 필요합니다.");
+			}
 		}
-		text(result.text(), 100_000);
-		return result;
-	}
-
-	public static void requireMatchingAdapter(Analysis analysis, WorkflowAnalyzer analyzer) {
-		if (analysis.getAdapterType() != analyzer.adapterType()
-				|| !analysis.getSchemaVersion().equals(analyzer.schemaVersion())) {
-			// Configuration/execution failure, not a model output or a new public error code.
-			throw new IllegalStateException("분석 기록과 실행할 Analyzer의 종류 또는 버전이 일치하지 않습니다.");
+		else {
+			if (assessment.nextQuestionText() != null && !assessment.nextQuestionText().isBlank()) {
+				throw new AiOutputInvalidException("충분한 답변 판정 시 후속 질문이 존재할 수 없습니다.");
+			}
 		}
 	}
 
-	private static void text(String value, int maxCodePoints) {
-		try {
-			TextRules.requiredPreserved("Analyzer output", value, maxCodePoints);
-		} catch (IllegalArgumentException exception) {
-			throw invalid();
+	public static void validateRevisionProposal(RevisionProposal proposal) {
+		if (proposal == null) {
+			throw new AiOutputInvalidException("수정안 생성 결과가 비어 있습니다.");
 		}
-	}
-
-	private static AiOutputInvalidException invalid() {
-		return new AiOutputInvalidException("분석 결과 형식이 올바르지 않습니다.");
+		if (proposal.proposedText() == null || proposal.proposedText().isBlank()) {
+			throw new AiOutputInvalidException("수정안 문구가 비어 있습니다.");
+		}
+		if (proposal.proposedText().codePointCount(0, proposal.proposedText().length()) > MAX_PROPOSED_TEXT_LENGTH) {
+			throw new AiOutputInvalidException("수정안 문구 길이가 허용 한도를 초과했습니다.");
+		}
 	}
 }
