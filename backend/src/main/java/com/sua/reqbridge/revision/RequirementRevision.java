@@ -1,5 +1,6 @@
 package com.sua.reqbridge.revision;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.Objects;
@@ -59,6 +60,15 @@ public class RequirementRevision {
 	@Column(name = "rejection_reason")
 	private String rejectionReason;
 
+	@Column(name = "created_at", nullable = false)
+	private Instant createdAt;
+
+	@Column(name = "approved_at")
+	private Instant approvedAt;
+
+	@Column(name = "reviewed_at")
+	private Instant reviewedAt;
+
 	@ElementCollection(fetch = FetchType.EAGER)
 	@CollectionTable(name = "revision_clarification", schema = "app",
 			joinColumns = @JoinColumn(name = "revision_id"))
@@ -83,6 +93,7 @@ public class RequirementRevision {
 		this.status = RevisionStatus.PROPOSED;
 		this.source = Objects.requireNonNull(source);
 		this.inputContentVersion = inputContentVersion;
+		this.createdAt = Instant.now();
 		for (Long clarificationId : Objects.requireNonNull(basedOnClarificationIds)) {
 			this.basedOnClarifications.add(new ClarificationRef(clarificationId, requirementId));
 		}
@@ -104,7 +115,10 @@ public class RequirementRevision {
 		if (status != RevisionStatus.PROPOSED) {
 			throw new IllegalStateException("PROPOSED 수정안만 승인할 수 있습니다.");
 		}
-		status = RevisionStatus.APPROVED;
+		Instant now = Instant.now();
+		this.status = RevisionStatus.APPROVED;
+		this.approvedAt = now;
+		this.reviewedAt = now;
 	}
 
 	public void reject(String rejectionReason) {
@@ -113,6 +127,19 @@ public class RequirementRevision {
 		}
 		this.rejectionReason = Objects.requireNonNull(rejectionReason);
 		this.status = RevisionStatus.REJECTED;
+		this.reviewedAt = Instant.now();
+	}
+
+	public Instant getCreatedAt() {
+		return createdAt;
+	}
+
+	public Instant getApprovedAt() {
+		return approvedAt;
+	}
+
+	public Instant getReviewedAt() {
+		return reviewedAt;
 	}
 
 	public Long getId() {
