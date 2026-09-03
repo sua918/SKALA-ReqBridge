@@ -10,7 +10,7 @@ import { getRequirement } from '@/api/requirements'
  * - 프로젝트명: GET /projects/{id}
  * - 문서명: GET /documents/{id}. 응답의 projectId로 상위 프로젝트도 함께 조회한다
  * - requirement 화면: GET /requirements/{id}의 documentId로 위 경로를 이어서 조회
- * - 조회 실패는 화면을 막지 않고 ID 표기로 되돌린다.
+ * - 조회 실패는 화면을 막지 않고 일반명(프로젝트/문서)으로 되돌린다. DB ID는 표시하지 않는다.
  */
 export function useBreadcrumbLabels() {
   const route = useRoute()

@@ -14,7 +14,7 @@ import StatusBadge from '@/components/common/StatusBadge.vue'
 import { useActiveAnalysisLock } from '@/composables/useActiveAnalysisLock'
 import { useAnalysisPoller } from '@/composables/useAnalysisPoller'
 import { useApiError } from '@/composables/useApiError'
-import { AnalysisKind, AnalysisStatus, ApiErrorCode } from '@/types/api'
+import { AnalysisKind, AnalysisStatus, ApiErrorCode, RequirementStatus } from '@/types/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -78,6 +78,24 @@ const analyzeButtonLabel = computed(() => {
 const detectedIssueCount = computed(
   () => activeAnalysis.value?.result?.issueIds?.length ?? 0,
 )
+
+const displayedRequirements = computed(() => {
+  const reviewStatuses = new Set([
+    RequirementStatus.AMBIGUOUS,
+    RequirementStatus.CLARIFYING,
+  ])
+
+  return [...requirements.value].sort((a, b) => {
+    const aPriority = reviewStatuses.has(a.status) ? 0 : 1
+    const bPriority = reviewStatuses.has(b.status) ? 0 : 1
+
+    if (aPriority !== bPriority) {
+      return aPriority - bPriority
+    }
+
+    return a.sequenceNo - b.sequenceNo
+  })
+})
 
 async function loadRequirements() {
   const data = await listRequirements(documentId.value)
@@ -213,6 +231,17 @@ function openRequirement(requirementId) {
   })
 }
 
+function requirementActionLabel(status) {
+  if (
+    status === RequirementStatus.AMBIGUOUS ||
+    status === RequirementStatus.CLARIFYING
+  ) {
+    return '불명확성 확인'
+  }
+
+  return '요구사항 보기'
+}
+
 onMounted(() => {
   void bootstrap()
 })
@@ -223,12 +252,8 @@ onMounted(() => {
     <header class="doc-header">
       <div>
         <h1>{{ document?.title ?? '문서' }}</h1>
-        <p class="doc-meta">
-          문서 #{{ documentId }}
-          <template v-if="latestAnalysisStatus">
-            ·
-            <StatusBadge kind="analysis" :value="latestAnalysisStatus" />
-          </template>
+        <p v-if="latestAnalysisStatus" class="doc-meta">
+          <StatusBadge kind="analysis" :value="latestAnalysisStatus" />
         </p>
       </div>
       <!-- Preview 진입은 C(P2) 몫으로 비어 있던 자리다 (인계서 4.7). -->
@@ -279,7 +304,7 @@ onMounted(() => {
         </p>
         <ul v-else class="req-list">
           <li
-            v-for="requirement in requirements"
+            v-for="requirement in displayedRequirements"
             :key="requirement.id"
             class="req-item"
           >
@@ -289,11 +314,11 @@ onMounted(() => {
               @click="openRequirement(requirement.id)"
             >
               <div class="req-top">
-                <span class="req-id">#{{ requirement.sequenceNo }}</span>
+                <span class="req-code">요구사항 {{ requirement.sequenceNo }}</span>
                 <StatusBadge kind="requirement" :value="requirement.status" />
               </div>
               <p class="req-text">{{ requirement.originalText }}</p>
-              <span class="req-link">확인 · 답변으로 이동 →</span>
+              <span class="req-link">{{ requirementActionLabel(requirement.status) }} →</span>
             </button>
           </li>
         </ul>
@@ -427,20 +452,23 @@ onMounted(() => {
 .req-top {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   margin-bottom: 8px;
 }
 
-.req-id {
+.req-code {
+  font-size: 0.8rem;
   font-weight: 700;
   color: #0f172a;
+  letter-spacing: 0.01em;
 }
 
 .req-text {
   margin: 0 0 10px;
   color: #334155;
-  font-size: 0.9rem;
-  line-height: 1.5;
+  font-size: 0.95rem;
+  line-height: 1.55;
 }
 
 .issue-summary {
