@@ -71,12 +71,32 @@ class DocumentAnalysisServiceTests {
 	}
 
 	@Test
-	void workerRecordsFailureAfterProcessingRollback() {
+	void workerTreatsNonAiIllegalArgumentAsExecutionFailure() {
 		DocumentAnalysisService service = mock(DocumentAnalysisService.class);
-		doThrow(new IllegalArgumentException("invalid output")).when(service).executeDocument(301);
+		doThrow(new IllegalArgumentException("invalid database value")).when(service).executeDocument(301);
+
+		new DocumentAnalysisWorker(service).run(new DocumentAnalysisRequested(301));
+
+		verify(service).fail(301, "ANALYSIS_EXECUTION_FAILED", "분석 실행 중 오류가 발생했습니다.");
+	}
+
+	@Test
+	void workerRecordsInvalidAiOutput() {
+		DocumentAnalysisService service = mock(DocumentAnalysisService.class);
+		doThrow(new AiOutputInvalidException("invalid output")).when(service).executeDocument(301);
 
 		new DocumentAnalysisWorker(service).run(new DocumentAnalysisRequested(301));
 
 		verify(service).fail(301, "AI_OUTPUT_INVALID", "분석 결과 형식이 올바르지 않습니다.");
+	}
+
+	@Test
+	void workerSeparatesUnexpectedExecutionFailure() {
+		DocumentAnalysisService service = mock(DocumentAnalysisService.class);
+		doThrow(new IllegalStateException("database unavailable")).when(service).executeDocument(301);
+
+		new DocumentAnalysisWorker(service).run(new DocumentAnalysisRequested(301));
+
+		verify(service).fail(301, "ANALYSIS_EXECUTION_FAILED", "분석 실행 중 오류가 발생했습니다.");
 	}
 }

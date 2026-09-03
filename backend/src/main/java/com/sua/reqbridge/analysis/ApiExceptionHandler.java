@@ -13,6 +13,12 @@ import com.sua.reqbridge.contract.StateConflictException;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
+	@ExceptionHandler(IllegalArgumentException.class)
+	@ResponseStatus(HttpStatus.BAD_REQUEST)
+	ErrorBody validation(IllegalArgumentException exception) {
+		return new ErrorBody(new ErrorDetail("VALIDATION_ERROR", exception.getMessage(), List.of()));
+	}
+
 	@ExceptionHandler(ResourceNotFoundException.class)
 	@ResponseStatus(HttpStatus.NOT_FOUND)
 	ErrorBody notFound(ResourceNotFoundException exception) {

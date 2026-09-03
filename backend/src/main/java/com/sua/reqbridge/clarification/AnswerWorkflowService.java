@@ -2,6 +2,7 @@ package com.sua.reqbridge.clarification;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.regex.Pattern;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +33,10 @@ public class AnswerWorkflowService {
 
 	private static final List<AnalysisStatus> ACTIVE = List.of(
 			AnalysisStatus.PENDING, AnalysisStatus.PROCESSING);
+	private static final String EDGE_WHITESPACE = "[\\x{0009}-\\x{000D}\\x{0020}\\x{0085}\\x{00A0}"
+			+ "\\x{1680}\\x{2000}-\\x{200A}\\x{2028}\\x{2029}\\x{202F}\\x{205F}\\x{3000}\\x{FEFF}]";
+	private static final Pattern EDGE_WHITESPACE_PATTERN = Pattern.compile(
+			"^" + EDGE_WHITESPACE + "+|" + EDGE_WHITESPACE + "+$");
 
 	private final AnalysisRepository analyses;
 	private final AmbiguityIssueRepository issues;
@@ -58,6 +63,9 @@ public class AnswerWorkflowService {
 
 	@Transactional
 	public AnswerReceipt submit(long clarificationId, String rawAnswer, long expectedVersion) {
+		if (expectedVersion < 1 || expectedVersion > 9_007_199_254_740_991L) {
+			throw new IllegalArgumentException("expectedContentVersion은 유효한 양수여야 합니다.");
+		}
 		String answer = normalize(rawAnswer);
 		Clarification clarification = clarification(clarificationId);
 		RequirementSnapshot requirement = core.lockRequirement(clarification.getRequirementId());
@@ -154,7 +162,10 @@ public class AnswerWorkflowService {
 		if (value == null) {
 			throw new IllegalArgumentException("답변을 입력해주세요.");
 		}
-		String normalized = value.replace("\r\n", "\n").strip();
+		if (value.codePointCount(0, value.length()) > 20_000) {
+			throw new IllegalArgumentException("답변은 1~20000자여야 합니다.");
+		}
+		String normalized = EDGE_WHITESPACE_PATTERN.matcher(value.replace("\r\n", "\n")).replaceAll("");
 		if (normalized.isEmpty() || normalized.codePointCount(0, normalized.length()) > 20_000) {
 			throw new IllegalArgumentException("답변은 1~20000자여야 합니다.");
 		}

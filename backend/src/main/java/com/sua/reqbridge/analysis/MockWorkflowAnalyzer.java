@@ -11,8 +11,8 @@ public class MockWorkflowAnalyzer {
 			+ "부하 시험은 10분 동안 수행하며 성공 응답 비율은 99.9% 이상이어야 한다.";
 
 	public DocumentResult analyze(DocumentSnapshot document) {
-		if (!"TEXT".equals(document.sourceType()) || !CONTENT.equals(document.content())) {
-			throw new IllegalArgumentException("지원하지 않는 Mock 문서입니다.");
+		if (!CONTENT.equals(document.content())) {
+			throw new AiOutputInvalidException("지원하지 않는 Mock 문서입니다.");
 		}
 		return new DocumentResult(List.of(new RequirementCandidate(1, CONTENT, List.of(
 				new IssueCandidate(AmbiguityType.QUANTITY_MISSING,
@@ -32,7 +32,7 @@ public class MockWorkflowAnalyzer {
 					"정량 기준이 확인되었습니다.", null);
 			case "p95 응답 시간 2초 이하입니다." -> new Assessment(true,
 					"성능 기준이 확인되었습니다.", null);
-			default -> throw new IllegalArgumentException("지원하지 않는 Mock 답변입니다.");
+			default -> throw new AiOutputInvalidException("지원하지 않는 Mock 답변입니다.");
 		};
 	}
 
