@@ -2,6 +2,9 @@ package com.sua.reqbridge.ambiguity;
 
 import java.util.Objects;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import com.sua.reqbridge.contract.AmbiguityType;
 import com.sua.reqbridge.contract.IssueStatus;
 
@@ -26,14 +29,16 @@ public class AmbiguityIssue {
 	private Long requirementId;
 
 	@Enumerated(EnumType.STRING)
-	@Column(nullable = false)
+	@JdbcTypeCode(SqlTypes.NAMED_ENUM)
+	@Column(nullable = false, columnDefinition = "ambiguity_type")
 	private AmbiguityType type;
 
 	@Column(nullable = false)
 	private String evidence;
 
 	@Enumerated(EnumType.STRING)
-	@Column(nullable = false)
+	@JdbcTypeCode(SqlTypes.NAMED_ENUM)
+	@Column(nullable = false, columnDefinition = "ambiguity_status")
 	private IssueStatus status;
 
 	protected AmbiguityIssue() {

@@ -1,15 +1,22 @@
 package com.sua.reqbridge.revision;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+import com.sua.reqbridge.contract.RevisionSource;
 import com.sua.reqbridge.contract.RevisionStatus;
 
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Embeddable;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -38,8 +45,14 @@ public class RequirementRevision {
 	private String text;
 
 	@Enumerated(EnumType.STRING)
-	@Column(nullable = false)
+	@JdbcTypeCode(SqlTypes.NAMED_ENUM)
+	@Column(nullable = false, columnDefinition = "revision_status")
 	private RevisionStatus status;
+
+	@Enumerated(EnumType.STRING)
+	@JdbcTypeCode(SqlTypes.NAMED_ENUM)
+	@Column(name = "source", nullable = false, columnDefinition = "revision_source")
+	private RevisionSource source;
 
 	@Column(name = "input_content_version", nullable = false)
 	private Long inputContentVersion;
@@ -47,17 +60,30 @@ public class RequirementRevision {
 	@Column(name = "rejection_reason")
 	private String rejectionReason;
 
-	@ElementCollection(fetch = FetchType.LAZY)
+	@Column(name = "created_at", nullable = false)
+	private Instant createdAt;
+
+	@Column(name = "approved_at")
+	private Instant approvedAt;
+
+	@Column(name = "reviewed_at")
+	private Instant reviewedAt;
+
+	@ElementCollection(fetch = FetchType.EAGER)
 	@CollectionTable(name = "revision_clarification", schema = "app",
 			joinColumns = @JoinColumn(name = "revision_id"))
-	@Column(name = "clarification_id", nullable = false)
-	private Set<Long> basedOnClarificationIds = new LinkedHashSet<>();
+	private Set<ClarificationRef> basedOnClarifications = new LinkedHashSet<>();
 
 	protected RequirementRevision() {
 	}
 
 	private RequirementRevision(long requirementId, int revisionNo, String text,
 			long inputContentVersion, Collection<Long> basedOnClarificationIds) {
+		this(requirementId, revisionNo, text, inputContentVersion, basedOnClarificationIds, RevisionSource.AI);
+	}
+
+	private RequirementRevision(long requirementId, int revisionNo, String text,
+			long inputContentVersion, Collection<Long> basedOnClarificationIds, RevisionSource source) {
 		if (revisionNo < 1 || inputContentVersion < 1) {
 			throw new IllegalArgumentException("revisionNo와 inputContentVersion은 1 이상이어야 합니다.");
 		}
@@ -65,21 +91,34 @@ public class RequirementRevision {
 		this.revisionNo = revisionNo;
 		this.text = Objects.requireNonNull(text);
 		this.status = RevisionStatus.PROPOSED;
+		this.source = Objects.requireNonNull(source);
 		this.inputContentVersion = inputContentVersion;
-		this.basedOnClarificationIds.addAll(Objects.requireNonNull(basedOnClarificationIds));
+		this.createdAt = Instant.now();
+		for (Long clarificationId : Objects.requireNonNull(basedOnClarificationIds)) {
+			this.basedOnClarifications.add(new ClarificationRef(clarificationId, requirementId));
+		}
 	}
 
 	public static RequirementRevision proposed(long requirementId, int revisionNo, String text,
 			long inputContentVersion, Collection<Long> basedOnClarificationIds) {
 		return new RequirementRevision(requirementId, revisionNo, text,
-				inputContentVersion, basedOnClarificationIds);
+				inputContentVersion, basedOnClarificationIds, RevisionSource.AI);
+	}
+
+	public static RequirementRevision proposed(long requirementId, int revisionNo, String text,
+			long inputContentVersion, Collection<Long> basedOnClarificationIds, RevisionSource source) {
+		return new RequirementRevision(requirementId, revisionNo, text,
+				inputContentVersion, basedOnClarificationIds, source);
 	}
 
 	public void approve() {
 		if (status != RevisionStatus.PROPOSED) {
 			throw new IllegalStateException("PROPOSED 수정안만 승인할 수 있습니다.");
 		}
-		status = RevisionStatus.APPROVED;
+		Instant now = Instant.now();
+		this.status = RevisionStatus.APPROVED;
+		this.approvedAt = now;
+		this.reviewedAt = now;
 	}
 
 	public void reject(String rejectionReason) {
@@ -88,6 +127,19 @@ public class RequirementRevision {
 		}
 		this.rejectionReason = Objects.requireNonNull(rejectionReason);
 		this.status = RevisionStatus.REJECTED;
+		this.reviewedAt = Instant.now();
+	}
+
+	public Instant getCreatedAt() {
+		return createdAt;
+	}
+
+	public Instant getApprovedAt() {
+		return approvedAt;
+	}
+
+	public Instant getReviewedAt() {
+		return reviewedAt;
 	}
 
 	public Long getId() {
@@ -118,7 +170,61 @@ public class RequirementRevision {
 		return rejectionReason;
 	}
 
+	public RevisionSource getSource() {
+		return source;
+	}
+
 	public Set<Long> getBasedOnClarificationIds() {
-		return Set.copyOf(basedOnClarificationIds);
+		return basedOnClarifications.stream()
+				.map(ClarificationRef::getClarificationId)
+				.collect(Collectors.toCollection(LinkedHashSet::new));
+	}
+
+	public Set<ClarificationRef> getBasedOnClarifications() {
+		return Set.copyOf(basedOnClarifications);
+	}
+
+	@Embeddable
+	public static class ClarificationRef {
+
+		@Column(name = "clarification_id", nullable = false)
+		private Long clarificationId;
+
+		@Column(name = "requirement_id", nullable = false)
+		private Long requirementId;
+
+		protected ClarificationRef() {
+		}
+
+		public ClarificationRef(Long clarificationId, Long requirementId) {
+			this.clarificationId = Objects.requireNonNull(clarificationId);
+			this.requirementId = Objects.requireNonNull(requirementId);
+		}
+
+		public Long getClarificationId() {
+			return clarificationId;
+		}
+
+		public Long getRequirementId() {
+			return requirementId;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (this == o) {
+				return true;
+			}
+			if (o == null || getClass() != o.getClass()) {
+				return false;
+			}
+			ClarificationRef that = (ClarificationRef) o;
+			return Objects.equals(clarificationId, that.clarificationId)
+					&& Objects.equals(requirementId, that.requirementId);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(clarificationId, requirementId);
+		}
 	}
 }

@@ -1,2 +1,5 @@
 # 개인 작업 문서
 docs/personal/
+
+# IDE 빌드 결과물
+/bin/

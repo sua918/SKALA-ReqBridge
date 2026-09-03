@@ -10,8 +10,18 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import com.sua.reqbridge.contract.ResourceNotFoundException;
 import com.sua.reqbridge.contract.StateConflictException;
 
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = {
+		"com.sua.reqbridge.analysis",
+		"com.sua.reqbridge.clarification",
+		"com.sua.reqbridge.revision"
+})
 public class ApiExceptionHandler {
+
+	@ExceptionHandler(IllegalArgumentException.class)
+	@ResponseStatus(HttpStatus.BAD_REQUEST)
+	ErrorBody validation(IllegalArgumentException exception) {
+		return new ErrorBody(new ErrorDetail("VALIDATION_ERROR", exception.getMessage(), List.of()));
+	}
 
 	@ExceptionHandler(ResourceNotFoundException.class)
 	@ResponseStatus(HttpStatus.NOT_FOUND)

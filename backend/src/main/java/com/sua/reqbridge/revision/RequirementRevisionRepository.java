@@ -10,4 +10,6 @@ public interface RequirementRevisionRepository extends JpaRepository<Requirement
 	Optional<RequirementRevision> findTopByRequirementIdOrderByRevisionNoDesc(long requirementId);
 
 	List<RequirementRevision> findByRequirementIdOrderByRevisionNoDesc(long requirementId);
+
+	boolean existsByRequirementIdAndStatus(long requirementId, com.sua.reqbridge.contract.RevisionStatus status);
 }

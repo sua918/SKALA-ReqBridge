@@ -2,6 +2,10 @@ package com.sua.reqbridge.clarification;
 
 import java.util.Objects;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+import com.sua.reqbridge.contract.ClarificationSource;
 import com.sua.reqbridge.contract.ClarificationStatus;
 
 import jakarta.persistence.Column;
@@ -33,17 +37,28 @@ public class Clarification {
 	@Column(name = "question_text", nullable = false)
 	private String questionText;
 
+	@Enumerated(EnumType.STRING)
+	@JdbcTypeCode(SqlTypes.NAMED_ENUM)
+	@Column(name = "question_source", nullable = false, columnDefinition = "clarification_source")
+	private ClarificationSource questionSource;
+
 	@Column(name = "answer_text")
 	private String answerText;
 
 	@Enumerated(EnumType.STRING)
-	@Column(nullable = false)
+	@JdbcTypeCode(SqlTypes.NAMED_ENUM)
+	@Column(nullable = false, columnDefinition = "clarification_status")
 	private ClarificationStatus status;
 
 	protected Clarification() {
 	}
 
 	private Clarification(long requirementId, long issueId, int roundNo, String questionText) {
+		this(requirementId, issueId, roundNo, questionText, ClarificationSource.AI);
+	}
+
+	private Clarification(long requirementId, long issueId, int roundNo, String questionText,
+			ClarificationSource questionSource) {
 		if (roundNo < 1) {
 			throw new IllegalArgumentException("roundNo는 1 이상이어야 합니다.");
 		}
@@ -51,12 +66,19 @@ public class Clarification {
 		this.issueId = issueId;
 		this.roundNo = roundNo;
 		this.questionText = Objects.requireNonNull(questionText);
+		this.questionSource = Objects.requireNonNull(questionSource);
 		this.status = ClarificationStatus.WAITING;
 	}
 
 	public static Clarification waiting(
 			long requirementId, long issueId, int roundNo, String questionText) {
-		return new Clarification(requirementId, issueId, roundNo, questionText);
+		return new Clarification(requirementId, issueId, roundNo, questionText, ClarificationSource.AI);
+	}
+
+	public static Clarification waiting(
+			long requirementId, long issueId, int roundNo, String questionText,
+			ClarificationSource questionSource) {
+		return new Clarification(requirementId, issueId, roundNo, questionText, questionSource);
 	}
 
 	public void answer(String answerText) {
@@ -92,6 +114,10 @@ public class Clarification {
 
 	public String getQuestionText() {
 		return questionText;
+	}
+
+	public ClarificationSource getQuestionSource() {
+		return questionSource;
 	}
 
 	public String getAnswerText() {
