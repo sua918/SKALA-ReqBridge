@@ -1,0 +1,187 @@
+package com.sua.reqbridge.analysis;
+
+import java.time.Instant;
+import java.util.Objects;
+
+import com.sua.reqbridge.contract.AnalysisKind;
+import com.sua.reqbridge.contract.AnalysisStatus;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = "analysis", schema = "app")
+public class Analysis {
+
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	private Long id;
+
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false)
+	private AnalysisKind kind;
+
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false)
+	private AnalysisStatus status;
+
+	@Column(name = "document_id", nullable = false)
+	private Long documentId;
+
+	@Column(name = "requirement_id")
+	private Long requirementId;
+
+	@Column(name = "clarification_id")
+	private Long clarificationId;
+
+	@Column(name = "input_content_version")
+	private Long inputContentVersion;
+
+	@Column(name = "retry_of_analysis_id")
+	private Long retryOfAnalysisId;
+
+	@Column(name = "input_snapshot", nullable = false, columnDefinition = "jsonb")
+	private String inputSnapshot;
+
+	@Column(columnDefinition = "jsonb")
+	private String result;
+
+	@Column(name = "error_code")
+	private String errorCode;
+
+	@Column(name = "error_message")
+	private String errorMessage;
+
+	@Column(name = "created_at", nullable = false)
+	private Instant createdAt;
+
+	@Column(name = "started_at")
+	private Instant startedAt;
+
+	@Column(name = "completed_at")
+	private Instant completedAt;
+
+	protected Analysis() {
+	}
+
+	private Analysis(AnalysisKind kind, long documentId, Long requirementId,
+			Long clarificationId, Long inputContentVersion, String inputSnapshot) {
+		this.kind = kind;
+		this.status = AnalysisStatus.PENDING;
+		this.documentId = documentId;
+		this.requirementId = requirementId;
+		this.clarificationId = clarificationId;
+		this.inputContentVersion = inputContentVersion;
+		this.inputSnapshot = Objects.requireNonNull(inputSnapshot);
+		this.createdAt = Instant.now();
+	}
+
+	public static Analysis pendingDocument(long documentId, String inputSnapshot) {
+		return new Analysis(AnalysisKind.DOCUMENT, documentId, null, null, null, inputSnapshot);
+	}
+
+	public static Analysis pendingAnswer(long documentId, long requirementId,
+			long clarificationId, long inputContentVersion, String inputSnapshot) {
+		return new Analysis(AnalysisKind.ANSWER, documentId, requirementId,
+				clarificationId, inputContentVersion, inputSnapshot);
+	}
+
+	public static Analysis pendingRevision(long documentId, long requirementId,
+			long inputContentVersion, String inputSnapshot) {
+		return new Analysis(AnalysisKind.REVISION, documentId, requirementId,
+				null, inputContentVersion, inputSnapshot);
+	}
+
+	public void start(Instant startedAt) {
+		if (status != AnalysisStatus.PENDING) {
+			throw new IllegalStateException("PENDING 작업만 시작할 수 있습니다.");
+		}
+		this.status = AnalysisStatus.PROCESSING;
+		this.startedAt = Objects.requireNonNull(startedAt);
+	}
+
+	public void complete(String result, Instant completedAt) {
+		if (status != AnalysisStatus.PROCESSING) {
+			throw new IllegalStateException("PROCESSING 작업만 완료할 수 있습니다.");
+		}
+		this.status = AnalysisStatus.COMPLETED;
+		this.result = Objects.requireNonNull(result);
+		this.completedAt = Objects.requireNonNull(completedAt);
+	}
+
+	public void fail(String errorCode, String errorMessage, Instant completedAt) {
+		if (status != AnalysisStatus.PENDING && status != AnalysisStatus.PROCESSING) {
+			throw new IllegalStateException("진행 전 또는 진행 중 작업만 실패 처리할 수 있습니다.");
+		}
+		this.status = AnalysisStatus.FAILED;
+		this.errorCode = Objects.requireNonNull(errorCode);
+		this.errorMessage = Objects.requireNonNull(errorMessage);
+		this.completedAt = Objects.requireNonNull(completedAt);
+	}
+
+	public Long getId() {
+		return id;
+	}
+
+	public AnalysisKind getKind() {
+		return kind;
+	}
+
+	public AnalysisStatus getStatus() {
+		return status;
+	}
+
+	public Long getDocumentId() {
+		return documentId;
+	}
+
+	public Long getRequirementId() {
+		return requirementId;
+	}
+
+	public Long getClarificationId() {
+		return clarificationId;
+	}
+
+	public Long getInputContentVersion() {
+		return inputContentVersion;
+	}
+
+	public Long getRetryOfAnalysisId() {
+		return retryOfAnalysisId;
+	}
+
+	public String getInputSnapshot() {
+		return inputSnapshot;
+	}
+
+	public String getResult() {
+		return result;
+	}
+
+	public String getErrorCode() {
+		return errorCode;
+	}
+
+	public String getErrorMessage() {
+		return errorMessage;
+	}
+
+	public Instant getCreatedAt() {
+		return createdAt;
+	}
+
+	public Instant getStartedAt() {
+		return startedAt;
+	}
+
+	public Instant getCompletedAt() {
+		return completedAt;
+	}
+}
