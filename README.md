@@ -65,6 +65,15 @@ Spring Boot와 Vue로 구성된 모노레포입니다. 로컬 데이터베이스
    npm run dev
    ```
 
+### 프런트엔드 실행 모드
+
+| 명령 | 데이터 원본 |
+| --- | --- |
+| `npm run dev` | 실제 백엔드 (`/api` → `http://localhost:8080` 프록시) |
+| `npm run dev:mock` | 프런트엔드 메모리 Mock 데이터 (백엔드 없이 화면 확인) |
+
+`npm run dev`가 기본이며 백엔드를 호출합니다. 백엔드 없이 화면만 확인할 때 `npm run dev:mock`을 사용합니다. `VITE_USE_MOCK=true`를 환경 변수로 지정해도 Mock으로 동작합니다.
+
 ## 접속 정보
 
 | 구성 요소  | 주소                  |

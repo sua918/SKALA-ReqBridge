@@ -10,7 +10,9 @@
   "packageManager": "npm@11.17.0",
   "scripts": {
     "dev": "vite",
+    "dev:mock": "vite --mode mock",
     "build": "vite build",
+    "build:mock": "vite build --mode mock",
     "preview": "vite preview"
   },
   "dependencies": {
