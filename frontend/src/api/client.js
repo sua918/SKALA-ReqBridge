@@ -2,7 +2,7 @@ import axios from 'axios'
 import { ApiErrorCode } from '@/types/api'
 
 /**
- * Spec 0.4.0 §2 공통 HTTP 클라이언트.
+ * Spec 0.4.0 §2 공통 HTTP 클라이언트. (B·C 공용)
  *
  * 성공: `{ data: ... }` — `unwrap()`으로 내부 payload만 꺼낸다.
  * 오류: `{ error: { code, message, fieldErrors } }` — `error.apiError`에 넣는다.
@@ -11,7 +11,12 @@ import { ApiErrorCode } from '@/types/api'
  * contentVersion만 다음 요청의 expectedContentVersion으로 보낸다.
  * 409 CONTENT_VERSION_CONFLICT면 workflow/requirement를 다시 조회하고
  * 사용자 입력은 유지한다. (화면 연동은 C / workflow)
+ *
+ * src/api/ 전체: 화면은 여기 export 함수만 호출. useMock이면 mocks, 아니면 실BE.
+ * 수정 시 상대방 PR review (합의).
  */
+
+/** axios 인스턴스. baseURL `/api` (Vite proxy → BE). */
 export const api = axios.create({
   baseURL: '/api',
   headers: { 'Content-Type': 'application/json' },
@@ -33,10 +38,12 @@ api.interceptors.response.use(
   },
 )
 
+/** Spec 성공 래퍼 `{ data }`의 안쪽 payload만 반환. */
 export function unwrap(response) {
   return response.data?.data
 }
 
+/** 409 CONTENT_VERSION_CONFLICT 여부 (C workflow에서 사용). */
 export function isContentVersionConflict(error) {
   return error.apiError?.code === ApiErrorCode.CONTENT_VERSION_CONFLICT
 }
