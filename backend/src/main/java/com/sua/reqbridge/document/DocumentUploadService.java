@@ -13,6 +13,11 @@ import com.sua.reqbridge.common.validation.TextRules;
 import com.sua.reqbridge.document.storage.DocumentStorage;
 import com.sua.reqbridge.project.ProjectService;
 
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.lang.Nullable;
+
+import com.sua.reqbridge.contract.DocumentRegisteredEvent;
+
 @Service
 public class DocumentUploadService {
 	private static final Logger log = LoggerFactory.getLogger(DocumentUploadService.class);
@@ -20,13 +25,21 @@ public class DocumentUploadService {
 	private final PdfTextExtractor extractor;
 	private final DocumentStorage storage;
 	private final DocumentFileWriter writer;
+	private final ApplicationEventPublisher events;
 
 	public DocumentUploadService(ProjectService projects, PdfTextExtractor extractor,
 			DocumentStorage storage, DocumentFileWriter writer) {
+		this(projects, extractor, storage, writer, null);
+	}
+
+	public DocumentUploadService(ProjectService projects, PdfTextExtractor extractor,
+			DocumentStorage storage, DocumentFileWriter writer,
+			@Nullable ApplicationEventPublisher events) {
 		this.projects = projects;
 		this.extractor = extractor;
 		this.storage = storage;
 		this.writer = writer;
+		this.events = events;
 	}
 
 	public Document upload(long projectId, String title, MultipartFile file) {
@@ -51,7 +64,11 @@ public class DocumentUploadService {
 		Document document = Document.fromPdf(projectId, normalizedTitle, content, objectKey, filename, bytes.length);
 		storage.upload(objectKey, bytes);
 		try {
-			return writer.save(document);
+			Document saved = writer.save(document);
+			if (events != null) {
+				events.publishEvent(new DocumentRegisteredEvent(saved.getId()));
+			}
+			return saved;
 		} catch (RuntimeException databaseFailure) {
 			log.error("FILE document DB write/commit failed (projectId={}, failureType={})",
 					projectId, databaseFailure.getClass().getSimpleName());
