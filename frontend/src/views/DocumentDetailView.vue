@@ -238,7 +238,9 @@ const displayedRequirements = computed(() => {
 const chips = computed(() => [
   { value: String(requirements.value.length), label: '요구사항' },
   {
-    value: String(requirements.value.filter((r) => r.status === 'CONFIRMED').length),
+    value: String(
+      requirements.value.filter((r) => r.status === RequirementStatus.CONFIRMED).length,
+    ),
     label: '확정',
   },
   { value: String(detectedIssueCount.value), label: '불명확성' },
