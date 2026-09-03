@@ -9,8 +9,8 @@ const TERMINAL = new Set([AnalysisStatus.COMPLETED, AnalysisStatus.FAILED])
  *
  * @param {object} [options]
  * @param {number} [options.intervalMs=1000]
- * @param {(analysis: object) => void} [options.onComplete]
- * @param {(analysis: object) => void} [options.onFailed]
+ * @param {(analysis: object) => void|Promise<void>} [options.onComplete]
+ * @param {(analysis: object) => void|Promise<void>} [options.onFailed]
  * @param {(error: unknown) => void} [options.onError]
  */
 export function useAnalysisPoller(options = {}) {
@@ -53,10 +53,11 @@ export function useAnalysisPoller(options = {}) {
 
       if (TERMINAL.has(next.status)) {
         stop()
+        //콜백이 async면 그 실패도 onError로 이어져야 한다.
         if (next.status === AnalysisStatus.COMPLETED) {
-          handlers.onComplete?.(next)
+          await handlers.onComplete?.(next)
         } else {
-          handlers.onFailed?.(next)
+          await handlers.onFailed?.(next)
         }
       }
     } catch (error) {

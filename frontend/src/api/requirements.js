@@ -11,9 +11,9 @@ import { notFound } from '@/api/mockError'
 import {
   getDocumentMock,
   getRequirementMock,
+  listIssuesByRequirementMock,
   listRequirementsMock,
 } from '@/mocks/store.js'
-import { seedIssues } from '@/mocks/fixtures.js'
 
 /** GET /documents/{documentId}/requirements — 목록 (분석 전이면 items=[]). */
 export async function listRequirements(documentId) {
@@ -46,6 +46,5 @@ export async function listMockIssuesByRequirement(requirementId) {
   if (!useMock) {
     return { items: [] }
   }
-  const items = seedIssues.filter((i) => i.requirementId === Number(requirementId))
-  return { items: structuredClone(items) }
+  return listIssuesByRequirementMock(requirementId)
 }

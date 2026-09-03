@@ -1,9 +1,9 @@
 /**
  * Mock 사용 여부 스위치.
  *
- * - true(기본): mocks/store 예비 데이터로 API 함수가 응답
- * - false: 실BE HTTP 호출 (VITE_USE_MOCK=false)
+ * - false(기본): 실BE HTTP 호출 (dev 서버는 /api를 8080으로 프록시)
+ * - true: mocks/store 예비 데이터로 API 함수가 응답 (`npm run dev:mock`)
  *
- * BE P1이 아직 불완전할 때 FE 화면·함수를 먼저 붙이기 위함.
+ * 값은 vite.config.js에서 mode 또는 VITE_USE_MOCK으로 결정한다.
  */
-export const useMock = import.meta.env.VITE_USE_MOCK !== 'false'
+export const useMock = import.meta.env.VITE_USE_MOCK === 'true'

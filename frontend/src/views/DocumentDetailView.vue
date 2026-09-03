@@ -43,7 +43,38 @@ const failedAnalysis = computed(() => {
 
 const latestAnalysisStatus = computed(() => activeAnalysis.value?.status ?? null)
 
+const isAnalyzed = computed(
+  () => activeAnalysis.value?.status === AnalysisStatus.COMPLETED,
+)
+
+/** 이력은 재시도까지 포함하므로 항상 가장 최근 작업이 현재 상태다. */
+function pickLatestAnalysis(items) {
+  return items.reduce(
+    (latest, item) => (latest === null || item.id > latest.id ? item : latest),
+    null,
+  )
+}
+
 const { isPolling, start: startPolling } = useAnalysisPoller()
+
+/** 성공 이력은 409, 실패 이후에는 retries만 허용한다 (Spec 5.9·6.3). */
+const isAnalyzeDisabled = computed(
+  () =>
+    isLocked.value ||
+    isPolling.value ||
+    isAnalyzed.value ||
+    failedAnalysis.value !== null,
+)
+
+const analyzeButtonLabel = computed(() => {
+  if (isPolling.value || isLocked.value) {
+    return '분석 중…'
+  }
+  if (isAnalyzed.value) {
+    return '분석 완료'
+  }
+  return failedAnalysis.value ? '재시도 필요' : '분석 요청'
+})
 
 async function loadIssuesForRequirements(items) {
   const map = {}
@@ -75,7 +106,6 @@ async function restoreActiveAnalysis() {
     startPolling(active.id, {
       onComplete: async (analysis) => {
         setActiveAnalysis(analysis)
-        clearActiveAnalysis()
         clearError()
         await loadRequirements()
       },
@@ -90,15 +120,9 @@ async function restoreActiveAnalysis() {
     return
   }
 
-  const failed = items.find((item) => item.status === AnalysisStatus.FAILED)
-  if (failed) {
-    setActiveAnalysis(failed)
-    return
-  }
-
-  const completed = items.find((item) => item.status === AnalysisStatus.COMPLETED)
-  if (completed) {
-    setActiveAnalysis(completed)
+  const latest = pickLatestAnalysis(items)
+  if (latest) {
+    setActiveAnalysis(latest)
   }
 }
 
@@ -149,7 +173,9 @@ async function onAnalyze() {
       captureError(error)
       await loadRequirements()
       const data = await listDocumentAnalyses(documentId.value, AnalysisKind.DOCUMENT)
-      const completed = data.items?.find((item) => item.status === AnalysisStatus.COMPLETED)
+      const completed = pickLatestAnalysis(
+        (data.items ?? []).filter((item) => item.status === AnalysisStatus.COMPLETED),
+      )
       if (completed) {
         setActiveAnalysis(completed)
       }
@@ -233,10 +259,10 @@ onMounted(() => {
           <button
             type="button"
             class="btn-primary"
-            :disabled="isLocked || isPolling"
+            :disabled="isAnalyzeDisabled"
             @click="onAnalyze"
           >
-            {{ isPolling || isLocked ? '분석 중…' : '분석 요청' }}
+            {{ analyzeButtonLabel }}
           </button>
         </div>
       </section>
