@@ -1,8 +1,13 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { createProject, listProjects } from '@/api/projects'
+import EmptyState from '@/components/common/EmptyState.vue'
 import ErrorMessage from '@/components/common/ErrorMessage.vue'
+import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import PageHero from '@/components/common/PageHero.vue'
+import PillButton from '@/components/common/PillButton.vue'
+import SectionLabel from '@/components/common/SectionLabel.vue'
 import { useApiError } from '@/composables/useApiError'
 
 const router = useRouter()
@@ -51,6 +56,17 @@ async function onCreate() {
   }
 }
 
+/**
+ * 히어로에 얹는 요약. 표시용이라 조회 로직과 무관하다.
+ *
+ * 예전에는 여기에 `MOCK`/`API` 칩이 있었다. 개발 중에 「지금 어느 데이터를 보고 있나」를
+ * 확인하려던 것인데, 쓰는 사람에게는 뜻이 없는 글자다. 그 확인은 개발자 도구의
+ * 네트워크 탭에서 하면 된다 (프론트엔드-추가-요청사항 2.3).
+ */
+const chips = computed(() => [
+  { value: String(projects.value.length), label: '프로젝트' },
+])
+
 function openProject(projectId) {
   router.push({
     name: 'document-list',
@@ -64,177 +80,159 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="project-page">
-    <h1>프로젝트 목록</h1>
+  <div class="page">
+    <!-- 페이지 정체성. 전 화면이 같은 히어로를 쓴다 — 화면을 옮겨도 기준선이 그대로다. -->
+    <PageHero
+      num="01" eyebrow="프로젝트" watermark="P"
+      :chips="chips"
+    >
+      <template #title>프로젝트</template>
+    </PageHero>
 
-    <ErrorMessage
-      v-if="hasError"
-      :message="message"
-      :field-errors="fieldErrors"
-    />
+    <ErrorMessage v-if="hasError" :message="message" :field-errors="fieldErrors" />
 
-    <p v-if="loading">불러오는 중…</p>
+    <LoadingSpinner v-if="loading" />
 
-    <template v-else>
-      <section class="panel">
-        <h2>프로젝트</h2>
-        <p v-if="projects.length === 0" class="empty">
-          등록된 프로젝트가 없습니다. 아래에서 먼저 만들어 주세요.
-        </p>
-        <ul v-else class="list">
-          <li v-for="project in projects" :key="project.id">
-            <button
-              type="button"
-              class="list-button"
-              @click="openProject(project.id)"
-            >
-              <div class="list-copy">
-                <strong class="list-title">{{ project.name }}</strong>
-                <p class="list-meta">{{ project.description ?? '설명 없음' }}</p>
+    <div v-else class="grid12">
+      <div class="col-list">
+        <div class="card list" data-reveal-stagger>
+          <SectionLabel :text="'프로젝트 ' + projects.length + '건'" />
+
+          <button
+            v-for="project in projects"
+            :key="project.id"
+            type="button"
+            class="prow row stagger-child"
+            @click="openProject(project.id)"
+          >
+            <!-- 앞자리에 있던 DB 저장번호를 뺐다. 목록 순번처럼 읽히지만 실제로는
+                 저장 순서라 5번 다음에 12번이 오고, 사용자가 셀 수 있는 수가 아니다.
+                 프로젝트는 이름으로 구분한다 (프론트엔드-추가-요청사항 2.3). -->
+            <div class="pbody">
+              <div class="hd pname">{{ project.name }}</div>
+              <div class="mi pdesc" :class="{ none: !project.description }">
+                {{ project.description || '설명 없음' }}
               </div>
-              <span class="list-action">프로젝트 열기 →</span>
-            </button>
-          </li>
-        </ul>
-      </section>
+            </div>
+            <!-- 화살표만 있으면 눌러서 어디로 가는지 알 수 없다. 행이 하는 일을 적는다. -->
+            <span class="mi act">
+              프로젝트 열기
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="arrow">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </span>
+          </button>
 
-      <section class="panel">
-        <h2>프로젝트 생성</h2>
-        <label class="field">
-          <span>이름</span>
-          <input v-model="name" type="text" maxlength="100" />
+          <EmptyState
+            v-if="projects.length === 0"
+            title="아직 프로젝트가 없습니다"
+            description="오른쪽에서 첫 프로젝트를 만들고 요구사항 문서를 등록하세요."
+          />
+        </div>
+      </div>
+
+      <form class="card pad form col-form stickycol" @submit.prevent="onCreate">
+        <div class="cardhead"><span class="eb">새 프로젝트</span></div>
+
+        <label class="lbl">
+          <span class="eb sm">이름</span>
+          <input v-model="name" type="text" class="field" maxlength="100"
+                 placeholder="예: 상품 조회 서비스" />
         </label>
-        <label class="field">
-          <span>설명 (선택)</span>
-          <textarea v-model="description" rows="3" maxlength="2000" />
+
+        <label class="lbl">
+          <span class="eb sm">설명 · 선택</span>
+          <textarea v-model="description" class="field ta" rows="2" maxlength="2000"
+                    placeholder="한 줄 설명" />
         </label>
-        <button
-          type="button"
-          class="btn-primary"
-          :disabled="saving || name.trim() === ''"
-          @click="onCreate"
-        >
-          {{ saving ? '생성 중…' : '프로젝트 생성' }}
-        </button>
-      </section>
-    </template>
-  </section>
+
+        <div class="formfoot">
+          <PillButton variant="primary" :loading="saving" :disabled="name.trim() === ''">
+            프로젝트 생성
+          </PillButton>
+        </div>
+      </form>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.project-page {
-  max-width: 880px;
+/* 목록 8 : 등록 폼 4. 전 화면이 같은 비율을 쓴다. */
+.col-list { grid-column: span 8; }
+/* 폼은 목록과 나란히 서는 도구다. 목록이 길어져도 따라오게 붙인다. */
+.col-form { grid-column: span 4; }
+
+/* 좁아지면 나란히 두기엔 이름이 잘린다. 폼을 아래로 내려 목록이 폭을 다 쓰게 한다. */
+@media (max-width: 1240px) {
+  .col-list { grid-column: span 12; }
+  .col-form { grid-column: span 12; position: static; margin-top: 28px; }
 }
 
-h1 {
-  margin: 0 0 20px;
-  font-size: 1.5rem;
-}
-
-.panel {
-  margin-bottom: 20px;
-  padding: 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  background: #ffffff;
-}
-
-.panel h2 {
-  margin: 0 0 12px;
-  font-size: 1rem;
-}
-
-.empty {
-  margin: 0;
-  color: #94a3b8;
-}
-
-.list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.list li + li {
-  margin-top: 8px;
-}
-
-.list-button {
-  display: flex;
-  width: 100%;
+/* 좌우 여백과 마지막 줄 밑줄은 .card.list가 맡는다. */
+/* 이름이 첫 칸이다. 앞자리를 채우던 저장번호를 뺐으니 시선이 바로 이름에서 시작한다.
+   행이 하는 일(「프로젝트 열기」)은 오른쪽 끝에 고정폭으로 세워, 행마다 같은 자리에서
+   같은 글자를 읽게 한다. */
+.prow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #f8fafc;
-  cursor: pointer;
+  width: 100%;
+  padding: 15px 0 16px;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  background: none;
   text-align: left;
-}
-
-.list-button:hover {
-  border-color: #93c5fd;
-  background: #eff6ff;
-}
-
-.list-copy {
-  min-width: 0;
-}
-
-.list-title {
-  display: block;
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.list-meta {
-  margin: 4px 0 0;
-  color: #64748b;
-  font-size: 0.8rem;
-}
-
-.list-action {
-  flex-shrink: 0;
-  color: #1d4ed8;
-  font-size: 0.85rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #475569;
-}
-
-.field input,
-.field textarea {
-  padding: 8px 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
+  color: inherit;
   font: inherit;
-  font-weight: 400;
-  color: #0f172a;
-}
-
-.btn-primary {
-  padding: 8px 14px;
-  border: none;
-  border-radius: 8px;
-  background: #2563eb;
-  color: #ffffff;
-  font-size: 0.9rem;
-  font-weight: 600;
   cursor: pointer;
+  transition: background-color .25s var(--ease);
 }
 
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.prow:hover { background: var(--bg-100); }
+.prow:hover .pname { color: var(--primary-700); }
+.prow:hover .act { color: var(--primary-600); }
+.prow:hover .arrow { transform: translateX(3px); }
+
+.pbody { min-width: 0; }
+
+/* 목록의 일은 「고르는 것」이지 「읽는 것」이 아니다.
+   이름 100자·설명 2000자를 다 펼치면 행 하나가 925px이 돼 한 화면에 한 건도 안 들어온다.
+   이름은 한 줄, 설명은 두 줄로 자르고 넘치면 말줄임한다. 전문은 들어가서 본다. */
+.pname {
+  font-size: 17px;
+  font-weight: 600;
+  transition: color .25s var(--ease);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+
+.pdesc {
+  margin-top: 5px;
+  font-size: var(--fs-sm);
+  color: var(--fg-500);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.pdesc.none { color: var(--fg-300); }
+/* 행의 동작 문구. 이름이 아무리 길어도 이 칸은 줄지 않아야 눌러야 할 곳이 흔들리지 않는다. */
+.act {
+  display: inline-flex; align-items: center; gap: 6px;
+  white-space: nowrap; color: var(--fg-400);
+  transition: color .25s var(--ease);
+}
+.arrow { transition: transform .3s var(--ease); }
+
+.form { display: flex; flex-direction: column; }
+.lbl { display: block; margin-bottom: 15px; }
+/* 입력 폼의 라벨이다 — 무엇을 쓰는 칸인지 알려주는 글이라 더 줄이지 않는다. */
+.eb.sm { font-size: var(--fs-micro); display: block; margin-bottom: 7px; }
+.ta { resize: vertical; line-height: 1.7; }
+.formfoot { display: flex; justify-content: flex-end; margin-top: 2px; }
 </style>

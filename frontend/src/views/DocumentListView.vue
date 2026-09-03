@@ -8,7 +8,13 @@ import {
 } from '@/api/documents'
 import { startDocumentAnalysis } from '@/api/analyses'
 import { getProject } from '@/api/projects'
+import FileUpload from 'primevue/fileupload'
+import EmptyState from '@/components/common/EmptyState.vue'
 import ErrorMessage from '@/components/common/ErrorMessage.vue'
+import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import PageHero from '@/components/common/PageHero.vue'
+import PillButton from '@/components/common/PillButton.vue'
+import SectionLabel from '@/components/common/SectionLabel.vue'
 import { useApiError } from '@/composables/useApiError'
 import { DocumentSourceType } from '@/types/api'
 
@@ -17,8 +23,14 @@ const router = useRouter()
 const projectId = computed(() => Number(route.params.projectId))
 
 const loading = ref(true)
-const project = ref(null)
 const documents = ref([])
+const project = ref(null)
+/**
+ * 빈 값으로 시작한다. 예전에는 제목에 「새 요구사항 문서」, 원문에 데모 본문이 미리
+ * 채워져 있었다. 시연에는 편했지만, 예시인지 내가 쓴 것인지 구분이 안 돼 그대로
+ * 저장될 수 있었다. 쓰는 방법은 placeholder로만 안내한다
+ * (프론트엔드-추가-요청사항 3.2).
+ */
 const title = ref('')
 const content = ref('')
 const saving = ref(false)
@@ -38,9 +50,12 @@ async function bootstrap() {
   loading.value = true
   clearError()
   try {
-    const [loadedProject] = await Promise.all([
-      getProject(projectId.value),
+    // 프로젝트를 함께 읽는다. 하위 화면에서도 「어느 프로젝트에 있는지」가 제목으로
+    // 보여야 한다 (프론트엔드-추가-요청사항 3.1). 이름 조회가 실패해도 문서 목록은
+    // 보여야 하므로 둘을 따로 처리한다.
+    const [, loadedProject] = await Promise.all([
       loadDocuments(),
+      getProject(projectId.value).catch(() => null),
     ])
     project.value = loadedProject
   } catch (error) {
@@ -70,31 +85,30 @@ async function onCreate() {
   }
 }
 
-const fileInput = ref(null)
-
+/** 고른 파일이 맞는지 확인할 수 있게 크기를 사람이 읽는 단위로 적는다. */
 function formatFileSize(bytes) {
-  if (bytes < 1024) {
-    return `${bytes} B`
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`
-  }
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-function onFileChange(event) {
-  const file = event.target.files?.[0] ?? null
+const uploader = ref(null)
+
+function onFileSelect(event) {
+  const file = event.files?.[0] ?? null
   uploadFile.value = file
+  // 제목을 따로 지어야 등록 버튼이 열리던 탓에, 파일을 고르고도 한 칸 더 채워야 했다.
+  // 대개 파일명이 곧 문서 이름이므로 비어 있을 때만 채운다.
+  // 사용자가 이미 쓴 제목은 건드리지 않는다 (프론트엔드-추가-요청사항 3.3).
   if (file && uploadTitle.value.trim() === '') {
     uploadTitle.value = file.name
   }
 }
 
+/** 업로드가 끝나면 위젯이 들고 있는 파일까지 비운다 — 화면만 지우면 다음 선택이 막힌다. */
 function clearSelectedFile() {
   uploadFile.value = null
-  if (fileInput.value) {
-    fileInput.value.value = ''
-  }
+  uploader.value?.clear?.()
 }
 
 async function onUpload() {
@@ -105,10 +119,13 @@ async function onUpload() {
       title: uploadTitle.value,
       file: uploadFile.value,
     })
+    // 올린 뒤 분석을 따로 눌러야 하면 흐름이 한 번 끊긴다. 여기서 이어서 건다.
+    // 실패해도 삼킨다 — 문서는 이미 저장됐고, 상세 화면의 restoreActiveAnalysis가
+    // 진행 중·완료 이력을 복구한다 (프론트엔드-추가-요청사항 3.3).
     try {
       await startDocumentAnalysis(document.id)
     } catch {
-      // 상세 화면의 restoreActiveAnalysis가 진행 중/완료 이력을 복구한다.
+      /* 상세에서 복구한다 */
     }
     uploadTitle.value = ''
     clearSelectedFile()
@@ -120,21 +137,20 @@ async function onUpload() {
   }
 }
 
+/** 히어로에 얹는 요약. 표시용이라 조회 로직과 무관하다. */
+const chips = computed(() => [
+  { value: String(documents.value.length), label: '문서' },
+  {
+    value: String(documents.value.filter((d) => d.sourceType === DocumentSourceType.FILE).length),
+    label: 'PDF',
+  },
+])
+
 function openDocument(documentId) {
   router.push({
     name: 'document-detail',
     params: { documentId: String(documentId) },
   })
-}
-
-function sourceTypeLabel(sourceType) {
-  if (sourceType === DocumentSourceType.FILE) {
-    return 'PDF'
-  }
-  if (sourceType === DocumentSourceType.TEXT) {
-    return '직접 입력'
-  }
-  return '문서'
 }
 
 onMounted(() => {
@@ -143,248 +159,232 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="doc-list-page">
-    <header class="page-header">
-      <h1>{{ project?.name ?? '프로젝트' }}</h1>
-      <p v-if="project?.description" class="subtitle">{{ project.description }}</p>
-    </header>
+  <div class="page">
+    <PageHero
+      num="02" eyebrow="문서" watermark="D" :chips="chips"
+    >
+      <template #title>{{ project?.name ?? '문서' }}</template>
+      <template v-if="project?.description" #subject>{{ project.description }}</template>
+    </PageHero>
 
-    <ErrorMessage
-      v-if="hasError"
-      :message="message"
-      :field-errors="fieldErrors"
-    />
+    <ErrorMessage v-if="hasError" :message="message" :field-errors="fieldErrors" />
 
-    <p v-if="loading">불러오는 중…</p>
+    <LoadingSpinner v-if="loading" />
 
-    <template v-else>
-      <section class="panel">
-        <h2>문서 목록</h2>
-        <p v-if="documents.length === 0" class="empty">등록된 문서가 없습니다.</p>
-        <ul v-else class="list">
-          <li v-for="doc in documents" :key="doc.id">
-            <button type="button" class="list-button" @click="openDocument(doc.id)">
-              <span class="list-title">{{ doc.title }}</span>
-              <span class="list-meta">{{ sourceTypeLabel(doc.sourceType) }}</span>
-            </button>
-          </li>
-        </ul>
-      </section>
+    <div v-else class="grid12">
+      <div class="col-list">
+        <div class="card list" data-reveal-stagger>
+          <SectionLabel :text="'문서 ' + documents.length + '건'" />
 
-      <section class="panel">
-        <h2>PDF 업로드 및 분석</h2>
-        <p class="hint">PDF 한 개, 최대 10MB. 원문은 서버가 추출합니다.</p>
-        <label class="field">
-          <span>제목</span>
-          <input
-            v-model="uploadTitle"
-            type="text"
-            maxlength="200"
-            :disabled="uploading"
+          <button
+            v-for="doc in documents"
+            :key="doc.id"
+            type="button"
+            class="drow row stagger-child"
+            @click="openDocument(doc.id)"
+          >
+            <!-- 저장번호를 뺐다. 문서는 제목으로 구분한다 (프론트엔드-추가-요청사항 2.3). -->
+            <span class="hd dtitle">{{ doc.title }}</span>
+            <span class="mi dsrc" :class="{ file: doc.sourceType === DocumentSourceType.FILE }">
+              {{ doc.sourceType === DocumentSourceType.FILE ? 'PDF' : '직접 입력' }}
+            </span>
+            <span class="mi ddate">{{ doc.createdAt.slice(0, 10) }}</span>
+            <span class="mi act">
+              문서 열기
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="arrow">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </span>
+          </button>
+
+          <EmptyState
+            v-if="documents.length === 0"
+            title="등록된 문서가 없습니다"
+            description="오른쪽에서 요구사항 원문을 등록하세요."
           />
-        </label>
-        <label class="field">
-          <span>파일</span>
-          <input
-            ref="fileInput"
-            type="file"
-            accept="application/pdf,.pdf"
-            :disabled="uploading"
-            @change="onFileChange"
-          />
-        </label>
-        <div v-if="uploadFile" class="selected-file">
-          <span class="selected-file-label">선택한 파일</span>
-          <strong class="selected-file-name">{{ uploadFile.name }}</strong>
-          <span class="selected-file-size">{{ formatFileSize(uploadFile.size) }}</span>
         </div>
-        <button
-          type="button"
-          class="btn-primary"
-          :disabled="uploading || uploadFile === null || uploadTitle.trim() === ''"
-          @click="onUpload"
-        >
-          {{ uploading ? '업로드 및 분석 중…' : 'PDF 업로드 및 분석' }}
-        </button>
-      </section>
+      </div>
 
-      <section class="panel">
-        <h2>직접 입력</h2>
-        <p class="hint">제목과 원문을 입력해 문서를 등록합니다.</p>
-        <label class="field">
-          <span>제목</span>
-          <input
-            v-model="title"
-            type="text"
-            placeholder="문서 제목을 입력하세요"
-          />
-        </label>
-        <label class="field">
-          <span>원문</span>
-          <textarea
-            v-model="content"
-            rows="8"
-            placeholder="요구사항 원문을 입력하세요"
-          />
-        </label>
-        <button
-          type="button"
-          class="btn-primary"
-          :disabled="saving"
-          @click="onCreate"
-        >
-          {{ saving ? '등록 중…' : '문서 등록' }}
-        </button>
-      </section>
-    </template>
-  </section>
+      <div class="col-form stickycol">
+        <!-- 시연의 시작점은 PDF 업로드다. 직접 입력이 먼저 보이면 준비한 문서를 두고
+             본문을 붙여넣는 길로 눈이 먼저 간다 (프론트엔드-추가-요청사항 3.3). -->
+        <form class="card pad" @submit.prevent="onUpload">
+          <div class="cardhead">
+            <span class="eb">PDF 업로드 및 분석</span>
+            <span class="mi srchint">파일에서 원문 추출</span>
+          </div>
+
+          <p class="mi hint">
+            PDF 한 개, 최대 10MB. 원문은 서버가 추출하고, 올린 뒤 분석까지 이어서 진행합니다.
+          </p>
+
+          <label class="lbl">
+            <span class="eb sm">제목</span>
+            <input
+              v-model="uploadTitle" type="text" class="field" maxlength="200"
+              :disabled="uploading"
+              placeholder="비워 두면 PDF 파일명을 씁니다"
+            />
+          </label>
+
+          <div class="lbl">
+            <span class="eb sm">파일</span>
+            <!-- 브라우저 기본 파일 입력은 OS마다 다른 모양으로 그려져 이 화면의
+                 다른 단추들과 아무 관계 없어 보인다. 고르는 일만 위젯에 맡기고
+                 업로드는 아래 단추가 계속 맡는다(auto=false). -->
+<span class="picker">
+              <FileUpload
+                ref="uploader" mode="basic" name="file"
+                accept="application/pdf,.pdf" :max-file-size="10485760"
+                :auto="false" :custom-upload="true" :disabled="uploading"
+                choose-label="PDF 선택"
+                @select="onFileSelect" @clear="uploadFile = null"
+              />
+            </span>
+          </div>
+
+          <!-- 무엇이 올라갈지 눌러서 확인할 수 없으니 고른 것을 적어 둔다. -->
+          <p v-if="uploadFile" class="mi picked">
+            <span class="pname">{{ uploadFile.name }}</span>
+            <span class="psize">{{ formatFileSize(uploadFile.size) }}</span>
+          </p>
+
+          <div class="formfoot">
+            <PillButton
+              variant="primary" :loading="uploading"
+              :disabled="uploadFile === null || uploadTitle.trim() === ''"
+            >{{ uploading ? '업로드 및 분석 중…' : 'PDF 업로드 및 분석' }}</PillButton>
+          </div>
+        </form>
+
+        <form class="card pad mt" @submit.prevent="onCreate">
+          <div class="cardhead">
+            <span class="eb">직접 입력</span>
+            <!-- 여기에 enum 값(TEXT·FILE)을 찍고 있었다. API 응답의 필드값이지
+                 사용자에게 뜻이 있는 말이 아니다 (프론트엔드-추가-요청사항 2.3). -->
+            <span class="mi srchint">원문을 붙여넣어 등록</span>
+          </div>
+
+          <label class="lbl">
+            <span class="eb sm">제목</span>
+            <input
+              v-model="title" type="text" class="field"
+              placeholder="문서 제목을 입력하세요"
+            />
+          </label>
+
+          <label class="lbl">
+            <span class="eb sm">원문</span>
+            <textarea
+              v-model="content" class="field ta" rows="8"
+              placeholder="요구사항 원문을 입력하세요"
+            />
+          </label>
+
+          <div class="formfoot">
+            <PillButton variant="quiet" :loading="saving">문서 등록</PillButton>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.doc-list-page {
-  max-width: 880px;
+.col-list { grid-column: span 8; }
+/* 등록 폼은 목록과 나란히 서는 도구다. 목록이 길어져도 따라오게 붙인다. */
+.col-form { grid-column: span 4; }
+
+/* 좁아지면 제목이 잘려 무슨 문서인지 안 읽힌다. 폼을 아래로 내려 목록이 폭을 다 쓰게 한다. */
+@media (max-width: 1240px) {
+  .col-list { grid-column: span 12; }
+  .col-form { grid-column: span 12; position: static; margin-top: 28px; }
 }
 
-.page-header {
-  margin: 0 0 20px;
+/* PrimeVue FileUpload는 자기 테마 색(에메랄드)을 들고 온다. 이 화면에서 초록은
+   「해결·완료」를 뜻하는 색이라, 아직 아무 일도 안 한 단추가 그 색이면 뜻이 어긋난다.
+   조용한 단추와 같은 결로 낮춘다. */
+.picker { display: inline-flex; align-items: center; }
+.picker :deep(.p-fileupload-choose-button) {
+  padding: 8px 15px;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  background: var(--bg-50);
+  color: var(--fg-800);
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  gap: 7px;
 }
+.picker :deep(.p-fileupload-choose-button:hover) { background: var(--bg-100); border-color: var(--bg-300); }
+.picker :deep(.p-fileupload-choose-button:disabled) { opacity: .55; }
+/* 위젯이 파일명 자리에 「No file chosen」을 영어로 박아 둔다. 고른 파일은 바로 아래
+   줄에서 이름과 크기까지 우리가 적으므로 이 자리는 비운다. */
+.picker :deep(.p-fileupload-choose-button + span) { display: none; }
 
-h1 {
-  margin: 0;
-  font-size: 1.5rem;
+/* 고른 파일 표시. 파일명이 길어도 줄바꿈으로 흘러 크기 값을 밀어내지 않는다. */
+.picked {
+  display: flex; align-items: baseline; gap: 8px;
+  margin: -6px 0 15px; color: var(--fg-600);
 }
+.picked .pname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picked .psize { flex-shrink: 0; color: var(--fg-400); }
 
-.subtitle {
-  margin: 4px 0 0;
-  color: #64748b;
-}
-
-.panel {
-  margin-bottom: 20px;
-  padding: 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  background: #ffffff;
-}
-
-.panel h2 {
-  margin: 0 0 12px;
-  font-size: 1rem;
-}
-
-.empty {
-  margin: 0;
-  color: #94a3b8;
-}
-
-.list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.list li + li {
-  margin-top: 8px;
-}
-
-.list-button {
-  display: flex;
-  width: 100%;
+/* 좌우 여백과 마지막 줄 밑줄은 .card.list가 맡는다. */
+.drow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px 96px auto;
+  gap: 14px;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #f8fafc;
-  cursor: pointer;
-  text-align: left;
-}
-
-.list-button:hover {
-  border-color: #93c5fd;
-  background: #eff6ff;
-}
-
-.list-title {
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.list-meta {
-  color: #64748b;
-  font-size: 0.8rem;
-}
-
-.hint {
-  margin: 0 0 12px;
-  color: #94a3b8;
-  font-size: 0.8rem;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #475569;
-}
-
-.field input,
-.field textarea {
-  padding: 8px 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  font: inherit;
-  font-weight: 400;
-  color: #0f172a;
-}
-
-.selected-file {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 8px 12px;
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #f8fafc;
-}
-
-.selected-file-label {
   width: 100%;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #64748b;
-}
-
-.selected-file-name {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.selected-file-size {
-  font-size: 0.8rem;
-  color: #64748b;
-}
-
-.btn-primary {
-  padding: 8px 14px;
-  border: none;
-  border-radius: 8px;
-  background: #2563eb;
-  color: #ffffff;
-  font-size: 0.9rem;
-  font-weight: 600;
+  min-height: 54px;
+  padding: 12px 0 13px;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: none;
+  text-align: left;
+  color: inherit;
+  font: inherit;
   cursor: pointer;
+  transition: background-color .25s var(--ease);
 }
 
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.drow:hover { background: var(--bg-100); }
+.drow:hover .dtitle { color: var(--primary-700); }
+.drow:hover .act { color: var(--primary-600); }
+.drow:hover .arrow { transform: translateX(3px); }
+
+/* 행의 동작 문구. 제목이 길어져도 이 칸은 줄지 않는다. */
+.act {
+  display: inline-flex; align-items: center; gap: 6px;
+  white-space: nowrap; color: var(--fg-400);
+  transition: color .25s var(--ease);
 }
+
+/* 제목이 두 줄이 되면 그 행만 키가 커져 목록 리듬이 깨진다.
+   한 줄로 자르고 넘치면 말줄임 — 전체 제목은 상세 화면에서 본다. */
+.dtitle {
+  font-size: var(--fs-h3);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color .25s var(--ease);
+}
+
+.dsrc { font-size: var(--fs-micro); color: var(--fg-500); }
+.dsrc.file { color: var(--accent-700); }
+.ddate { font-size: var(--fs-micro); color: var(--fg-400); }
+.arrow { transition: transform .3s var(--ease); }
+
+.mt { margin-top: 18px; }
+.srchint { font-size: var(--fs-nano); color: var(--fg-400); }
+.lbl { display: block; margin-bottom: 15px; }
+/* 입력 폼의 라벨이다 — 무엇을 쓰는 칸인지 알려주는 글이라 더 줄이지 않는다. */
+.eb.sm { font-size: var(--fs-micro); display: block; margin-bottom: 7px; }
+.ta { resize: vertical; line-height: 1.7; }
+.hint { font-size: var(--fs-sm); color: var(--fg-600); line-height: 1.7; margin: 0 0 14px; }
+.filefield { width: 100%; font-size: var(--fs-sm); color: var(--fg-700); }
+.formfoot { display: flex; justify-content: flex-end; margin-top: 2px; }
 </style>
