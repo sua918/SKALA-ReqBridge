@@ -34,10 +34,11 @@
                   "enum": [
                     "QUANTITY_MISSING",
                     "PERFORMANCE_MISSING",
-                    "ACTOR_UNCLEAR",
-                    "CONDITION_INCOMPLETE",
-                    "RECOVERY_MISSING",
-                    "TERMINOLOGY_INCONSISTENT"
+                    "CONDITION_MISSING",
+                    "ACTOR_MISSING",
+                    "SUCCESS_CRITERIA_MISSING",
+                    "TERM_AMBIGUOUS",
+                    "EXCEPTION_MISSING"
                   ],
                   "description": "불명확성 분류"
                 },

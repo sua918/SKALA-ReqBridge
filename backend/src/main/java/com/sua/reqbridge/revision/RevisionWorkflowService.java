@@ -97,8 +97,19 @@ public class RevisionWorkflowService {
 				.findFirst()
 				.orElse(null);
 
-		String inputSnapshot = json.writeValueAsString(new RevisionInput(
-				requirementId, requirement.documentId(), expectedVersion, latestRejectionReason));
+		List<Clarification> answeredClarifications = clarifications
+				.findByRequirementIdOrderByIssueIdAscRoundNoAsc(requirementId).stream()
+				.filter(item -> item.getAnswerText() != null)
+				.toList();
+		List<ClarificationContext> contexts = answeredClarifications.stream()
+				.map(item -> new ClarificationContext(
+						item.getId(), item.getIssueId(), item.getQuestionText(), item.getAnswerText()))
+				.toList();
+		String originalText = requirement.originalText() != null ? requirement.originalText() : "";
+
+		RevisionGenerationInput revisionInput = new RevisionGenerationInput(
+				requirementId, originalText, contexts, latestRejectionReason);
+		String inputSnapshot = json.writeValueAsString(revisionInput);
 
 		Analysis analysis = analyses.save(Analysis.pendingRevision(
 				requirement.documentId(), requirementId, expectedVersion, inputSnapshot,
@@ -115,26 +126,35 @@ public class RevisionWorkflowService {
 		long requirementId = analysis.getRequirementId();
 		int revisionNo = revisions.findTopByRequirementIdOrderByRevisionNoDesc(requirementId)
 				.map(RequirementRevision::getRevisionNo).orElse(0) + 1;
-		List<Clarification> answeredClarifications = clarifications
-				.findByRequirementIdOrderByIssueIdAscRoundNoAsc(requirementId).stream()
-				.filter(item -> item.getAnswerText() != null)
+
+		RevisionGenerationInput input;
+		try {
+			input = json.readValue(analysis.getInputSnapshot(), RevisionGenerationInput.class);
+		}
+		catch (Exception e) {
+			List<Clarification> answeredClarifications = clarifications
+					.findByRequirementIdOrderByIssueIdAscRoundNoAsc(requirementId).stream()
+					.filter(item -> item.getAnswerText() != null)
+					.toList();
+			RequirementSnapshot requirement = core.getRequirement(requirementId);
+			String originalText = requirement != null ? requirement.originalText() : "";
+			List<ClarificationContext> contexts = answeredClarifications.stream()
+					.map(item -> new ClarificationContext(
+							item.getId(), item.getIssueId(), item.getQuestionText(), item.getAnswerText()))
+					.toList();
+			String latestRejectionReason = revisions.findByRequirementIdOrderByRevisionNoDesc(requirementId).stream()
+					.filter(r -> r.getStatus() == RevisionStatus.REJECTED)
+					.map(RequirementRevision::getRejectionReason)
+					.findFirst()
+					.orElse(null);
+			input = new RevisionGenerationInput(requirementId, originalText, contexts, latestRejectionReason);
+		}
+
+		List<Long> evidenceIds = input.clarifications().stream()
+				.map(ClarificationContext::clarificationId)
 				.toList();
-		List<Long> evidenceIds = answeredClarifications.stream()
-				.map(Clarification::getId)
-				.toList();
-		RequirementSnapshot requirement = core.getRequirement(requirementId);
-		String originalText = requirement != null ? requirement.originalText() : "";
-		List<ClarificationContext> contexts = answeredClarifications.stream()
-				.map(item -> new ClarificationContext(
-						item.getId(), item.getIssueId(), item.getQuestionText(), item.getAnswerText()))
-				.toList();
-		String latestRejectionReason = revisions.findByRequirementIdOrderByRevisionNoDesc(requirementId).stream()
-				.filter(r -> r.getStatus() == RevisionStatus.REJECTED)
-				.map(RequirementRevision::getRejectionReason)
-				.findFirst()
-				.orElse(null);
-		RevisionProposal proposal = analyzer.generateRevision(new RevisionGenerationInput(
-				requirementId, originalText, contexts, latestRejectionReason));
+
+		RevisionProposal proposal = analyzer.generateRevision(input);
 		AnalyzerOutputValidator.validateRevisionProposal(proposal);
 		RequirementRevision revision = revisions.save(RequirementRevision.proposed(
 				requirementId, revisionNo, proposal.proposedText(), analysis.getInputContentVersion(), evidenceIds));

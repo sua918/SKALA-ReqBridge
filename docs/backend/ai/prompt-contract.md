@@ -21,13 +21,14 @@ ReqBridge는 요구사항 명세서의 모호성을 검출하고, 고객과의 �
 2. **도메인 격리 (Pure AI Contract)**:
    - AI 엔진은 DB 생성 식별자(PK), 최종 승인 여부(`APPROVED`/`CONFIRMED`), `contentVersion` 증가 등을 결정하지 않습니다.
    - AI 엔진은 오직 **도메인 후보(요구사항 문장, 불명확성 분류, 질문 문구, 답변 충분성 판정, 수정안 텍스트)**만 제안합니다.
-3. **불명확성 분류 (AmbiguityType) 6종 표준**:
+3. **불명확성 분류 (AmbiguityType) 7종 표준**:
    - `QUANTITY_MISSING`: 수치·수량·처리 건수 등 정량 기준 누락
    - `PERFORMANCE_MISSING`: 응답 시간, TPS, 처리 기한 등 성능 기준 누락
-   - `ACTOR_UNCLEAR`: 주체(사용자, 관리자, 시스템)의 역할 불명확
-   - `CONDITION_INCOMPLETE`: 선행 조건, 예외 조건, 분기 조건 누락
-   - `RECOVERY_MISSING`: 장애, 실패, 네트워크 오류 시 복구/대체 절차 누락
-   - `TERMINOLOGY_INCONSISTENT`: 용어 불일치 또는 다의적 해석 가능성
+   - `CONDITION_MISSING`: 선행 조건, 특정 상황별 동작 조건 누락
+   - `ACTOR_MISSING`: 행위 주체(사용자, 관리자, 시스템 등) 누락 또는 모호
+   - `SUCCESS_CRITERIA_MISSING`: 성공/완료 판정 기준 및 검증 기준 누락
+   - `TERM_AMBIGUOUS`: 모호하거나 다의적인 용어 사용
+   - `EXCEPTION_MISSING`: 장애, 오류, 비정상 상황 시 예외 처리 및 복구 절차 누락
 
 ---
 

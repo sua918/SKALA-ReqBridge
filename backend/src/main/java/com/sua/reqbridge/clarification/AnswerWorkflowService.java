@@ -97,9 +97,27 @@ public class AnswerWorkflowService {
 
 		clarification.answer(answer);
 		long version = core.advanceContentVersion(requirement.id(), expectedVersion);
+
+		AmbiguityIssue issue = issues.findById(clarification.getIssueId())
+				.orElseThrow(() -> new ResourceNotFoundException("불명확성 문제를 찾을 수 없습니다."));
+		String requirementText = requirement.originalText() != null ? requirement.originalText() : "";
+		List<AnswerAssessmentInput.ClarificationHistory> history = clarifications
+				.findByRequirementIdOrderByIssueIdAscRoundNoAsc(requirement.id()).stream()
+				.filter(item -> item.getIssueId() == issue.getId()
+						&& item.getId() != clarification.getId()
+						&& item.getAnswerText() != null)
+				.map(item -> new AnswerAssessmentInput.ClarificationHistory(
+						item.getId(), item.getRoundNo(), item.getQuestionText(), item.getAnswerText()))
+				.toList();
+
+		AnswerAssessmentInput assessmentInput = new AnswerAssessmentInput(
+				requirement.id(), version, requirementText,
+				issue.getType(), issue.getEvidence(),
+				clarificationId, clarification.getIssueId(), clarification.getRoundNo(),
+				clarification.getQuestionText(), answer, history);
+
 		Analysis analysis = analyses.save(Analysis.pendingAnswer(requirement.documentId(), requirement.id(),
-				clarificationId, version, json.writeValueAsString(
-						new AnswerInput(clarificationId, clarification.getIssueId(), answer, version)),
+				clarificationId, version, json.writeValueAsString(assessmentInput),
 				analyzer.adapterType(), analyzer.schemaVersion()));
 		events.publishEvent(new AnswerAnalysisRequested(analysis.getId()));
 		return new AnswerReceipt(clarificationId, requirement.id(), version, analysis);
@@ -113,24 +131,31 @@ public class AnswerWorkflowService {
 		Clarification clarification = clarification(analysis.getClarificationId());
 		AmbiguityIssue issue = issues.findById(clarification.getIssueId())
 				.orElseThrow(() -> new ResourceNotFoundException("불명확성 문제를 찾을 수 없습니다."));
-		RequirementSnapshot requirement = core.getRequirement(analysis.getRequirementId());
-		String requirementText = requirement != null ? requirement.originalText() : "";
-		long contentVersion = requirement != null ? requirement.contentVersion() : analysis.getInputContentVersion();
 
-		List<AnswerAssessmentInput.ClarificationHistory> history = clarifications
-				.findByRequirementIdOrderByIssueIdAscRoundNoAsc(analysis.getRequirementId()).stream()
-				.filter(item -> item.getIssueId() == issue.getId()
-						&& item.getId() != clarification.getId()
-						&& item.getAnswerText() != null)
-				.map(item -> new AnswerAssessmentInput.ClarificationHistory(
-						item.getId(), item.getRoundNo(), item.getQuestionText(), item.getAnswerText()))
-				.toList();
+		AnswerAssessmentInput input;
+		try {
+			input = json.readValue(analysis.getInputSnapshot(), AnswerAssessmentInput.class);
+		}
+		catch (Exception e) {
+			RequirementSnapshot requirement = core.getRequirement(analysis.getRequirementId());
+			String requirementText = requirement != null ? requirement.originalText() : "";
+			long contentVersion = requirement != null ? requirement.contentVersion() : analysis.getInputContentVersion();
+			List<AnswerAssessmentInput.ClarificationHistory> history = clarifications
+					.findByRequirementIdOrderByIssueIdAscRoundNoAsc(analysis.getRequirementId()).stream()
+					.filter(item -> item.getIssueId() == issue.getId()
+							&& item.getId() != clarification.getId()
+							&& item.getAnswerText() != null)
+					.map(item -> new AnswerAssessmentInput.ClarificationHistory(
+							item.getId(), item.getRoundNo(), item.getQuestionText(), item.getAnswerText()))
+					.toList();
+			input = new AnswerAssessmentInput(
+					analysis.getRequirementId(), contentVersion, requirementText,
+					issue.getType(), issue.getEvidence(),
+					clarification.getId(), clarification.getIssueId(), clarification.getRoundNo(),
+					clarification.getQuestionText(), clarification.getAnswerText(), history);
+		}
 
-		AnswerAssessment assessed = analyzer.assessAnswer(new AnswerAssessmentInput(
-				analysis.getRequirementId(), contentVersion, requirementText,
-				issue.getType(), issue.getEvidence(),
-				clarification.getId(), clarification.getIssueId(), clarification.getRoundNo(),
-				clarification.getQuestionText(), clarification.getAnswerText(), history));
+		AnswerAssessment assessed = analyzer.assessAnswer(input);
 		com.sua.reqbridge.analysis.AnalyzerOutputValidator.validateAnswerAssessment(assessed);
 
 		Long nextId = null;
@@ -149,7 +174,7 @@ public class AnswerWorkflowService {
 				List<Long> evidenceIds = answeredClarifications.stream()
 						.map(Clarification::getId)
 						.toList();
-				String originalText = requirementText;
+				String originalText = input.requirementText() != null ? input.requirementText() : "";
 				List<ClarificationContext> contexts = answeredClarifications.stream()
 						.map(item -> new ClarificationContext(
 								item.getId(), item.getIssueId(), item.getQuestionText(), item.getAnswerText()))
