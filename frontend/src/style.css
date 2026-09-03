@@ -94,8 +94,14 @@
   /* 900은 광고 문구의 무게다. 오래 보는 화면에서는 제목이 검은 덩어리로 남는다.
      750이면 본문(400)과 확실히 갈리면서 획이 뭉치지 않는다.
      카드 제목(title)은 본문 바로 위 단계라 650으로 한 칸만 올린다. */
-  --fw-display:750;
-  --fw-title:650;
+  /* 굵기 단계를 벌렸다. 650·600은 400과 붙어 있어서, 제목을 굵게 준 자리가
+     본문과 같은 무게로 읽혔다. 한글은 라틴보다 획이 많아 같은 수치에서 덜 굵어 보인다.
+     800 / 750 / 700 / 400 — 네 단이 눈으로 구별되는 최소 간격이다. */
+  /* 강조는 「제목」과 「지금 읽어야 할 문장」에만 준다. 라벨·곁글까지 굵어지면
+     굵은 것이 화면의 기본값이 되어, 정작 강조한 자리가 묻힌다.
+     800 = 페이지 제목 / 750 = 카드·행 제목 / 400 = 본문 / 600 = 라벨(약하게). */
+  --fw-display:800;
+  --fw-title:750;
   --fw-body:400;
   --fw-label:600;
 
@@ -263,8 +269,8 @@ button { font: inherit; }
 .card > .cardhead > .eb,
 .card > .eb:first-child {
   font-family: var(--font-body);
-  font-size: var(--fs-h3);
-  font-weight: 700;
+  font-size: var(--fs-h2);
+  font-weight: 750;
   letter-spacing: -.015em;
   text-transform: none;
   color: var(--fg-950);

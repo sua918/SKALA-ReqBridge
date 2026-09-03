@@ -577,7 +577,13 @@ onMounted(() => {
 .round { margin-top: 16px; padding-top: 15px; border-top: 1px solid var(--rule); }
 .roundhead { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
 .eb.sm { font-size: var(--fs-micro); }
-.question { margin: 0; font-size: var(--fs-sm); line-height: 1.75; color: var(--fg-950); word-break: keep-all; }
+/* 이 화면에서 사람이 읽고 답해야 하는 문장이다. 본문과 같은 크기·무게로 두면
+   근거·회차 같은 곁글에 묻힌다. 한 단 키우고 굵기를 준다. */
+.question {
+  margin: 0;
+  font-size: var(--fs-lead); font-weight: 650; line-height: 1.7;
+  color: var(--fg-950); word-break: keep-all;
+}
 
 .answered {
   margin-top: 10px;

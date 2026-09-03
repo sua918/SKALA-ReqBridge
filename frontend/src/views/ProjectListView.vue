@@ -96,7 +96,7 @@ onMounted(() => {
     <div v-else class="grid12">
       <div class="col-list">
         <div class="card list" data-reveal-stagger>
-          <SectionLabel :text="'프로젝트 ' + projects.length + '건'" />
+          <SectionLabel text="프로젝트" :count="projects.length" />
 
           <button
             v-for="project in projects"

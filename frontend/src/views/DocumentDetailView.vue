@@ -283,7 +283,7 @@ onMounted(() => {
         <div class="card pad quiet">
           <div class="cardhead">
             <span class="eb">원문</span>
-            <span class="mi len">{{ [...(document.content ?? '')].length.toLocaleString() }}자</span>
+            <span class="mi len"><b class="fig">{{ [...(document.content ?? '')].length.toLocaleString() }}</b>자</span>
           </div>
           <p class="source">{{ document.content }}</p>
         </div>
@@ -303,7 +303,10 @@ onMounted(() => {
           </div>
 
           <p v-else class="mi hint">
-            {{ isAnalyzed ? '확인된 불명확성 ' + detectedIssueCount + '건' : '아직 분석하지 않았습니다.' }}
+            <template v-if="isAnalyzed">
+              확인된 불명확성 <b class="fig num">{{ detectedIssueCount }}</b>건
+            </template>
+            <template v-else>아직 분석하지 않았습니다.</template>
           </p>
 
           <div class="btnrow">
@@ -325,7 +328,7 @@ onMounted(() => {
       <!-- 작업 열: 요구사항 목록 -->
       <div class="right" data-reveal>
         <div class="card list" data-reveal-stagger>
-          <SectionLabel :text="'요구사항 ' + requirements.length + '건'" />
+          <SectionLabel text="요구사항" :count="requirements.length" />
 
           <button
             v-for="requirement in displayedRequirements"
@@ -380,11 +383,14 @@ onMounted(() => {
   .left, .right { grid-column: span 12; }
 }
 
-.len { font-size: var(--fs-micro); color: var(--fg-600); }
+.len { font-size: var(--fs-micro); color: var(--fg-500); }
+.len b { font-weight: 700; color: var(--fg-800); }
 .source { margin: 0; font-size: var(--fs-sm); line-height: 1.9; color: var(--fg-800); white-space: pre-wrap; word-break: keep-all; }
 /* 진행 중 알림은 먹판(.sysnote)이라 여기서는 여백만 잡는다. */
 .sysnote { margin-bottom: 14px; }
 .hint { font-size: var(--fs-sm); color: var(--fg-600); line-height: 1.7; }
+/* 문장 안의 수치. 문장은 낮추고 숫자만 세운다 — 알고 싶은 것은 「몇 건인가」다. */
+.hint .num { font-size: var(--fs-h3); font-weight: 800; color: var(--accent-700); }
 .btnrow { display: flex; gap: 8px; margin: 14px 0 2px; }
 
 /* 한 줄에 여러 칼럼을 밀어넣으면 본문이 눌려 글자가 세로로 흐른다.

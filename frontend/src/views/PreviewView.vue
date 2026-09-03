@@ -208,7 +208,7 @@ onMounted(() => {
       <div class="main" data-reveal>
         <!-- 고객 질문서 -->
         <template v-if="isCustomer">
-          <SectionLabel :text="'지금 답이 필요한 질문 · ' + preview.requirements.length + '건'" />
+          <SectionLabel text="지금 답이 필요한 질문" :count="preview.requirements.length" />
 
           <EmptyState
             v-if="preview.requirements.length === 0"
@@ -239,7 +239,7 @@ onMounted(() => {
 
         <!-- 개발팀용 -->
         <template v-else>
-          <SectionLabel :text="'확정 요구사항 · ' + preview.confirmedRequirements.length + '건'" />
+          <SectionLabel text="확정 요구사항" :count="preview.confirmedRequirements.length" />
 
           <EmptyState
             v-if="preview.confirmedRequirements.length === 0"
@@ -273,8 +273,8 @@ onMounted(() => {
           </div>
 
           <SectionLabel
-            class="mt-lg"
-            :text="'미확정 요구사항 · ' + preview.unconfirmedRequirements.length + '건'"
+            class="mt-lg" text="미확정 요구사항"
+            :count="preview.unconfirmedRequirements.length"
           />
 
           <p v-if="preview.unconfirmedRequirements.length === 0" class="mi none">
@@ -396,7 +396,13 @@ onMounted(() => {
 .qrow { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--rule); }
 .qhead { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-bottom: 8px; }
 .qid { font-size: var(--fs-nano); color: var(--fg-400); }
-.question { margin: 0; font-size: var(--fs-sm); line-height: 1.75; color: var(--fg-950); word-break: keep-all; }
+/* 이 화면에서 사람이 읽고 답해야 하는 문장이다. 본문과 같은 크기·무게로 두면
+   근거·회차 같은 곁글에 묻힌다. 한 단 키우고 굵기를 준다. */
+.question {
+  margin: 0;
+  font-size: var(--fs-lead); font-weight: 650; line-height: 1.7;
+  color: var(--fg-950); word-break: keep-all;
+}
 .evidence { margin: 7px 0 0; font-size: var(--fs-micro); color: var(--fg-500); line-height: 1.7; word-break: keep-all; }
 .evidence.full { flex: 1 1 100%; margin: 0; }
 

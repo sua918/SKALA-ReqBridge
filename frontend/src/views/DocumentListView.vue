@@ -174,7 +174,7 @@ onMounted(() => {
     <div v-else class="grid12">
       <div class="col-list">
         <div class="card list" data-reveal-stagger>
-          <SectionLabel :text="'문서 ' + documents.length + '건'" />
+          <SectionLabel text="문서" :count="documents.length" />
 
           <button
             v-for="doc in documents"
