@@ -5,6 +5,9 @@ import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -13,17 +16,24 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import com.sua.reqbridge.contract.ResourceNotFoundException;
 import com.sua.reqbridge.contract.StateConflictException;
 
+import jakarta.persistence.LockTimeoutException;
+import jakarta.persistence.OptimisticLockException;
+import jakarta.persistence.PessimisticLockException;
 import jakarta.validation.ConstraintViolationException;
 
+// Common HTTP contracts take precedence over feature-local fallback advice (including causes).
+@Order(Ordered.HIGHEST_PRECEDENCE)
 @RestControllerAdvice
 public class GlobalApiExceptionHandler {
 
@@ -42,7 +52,8 @@ public class GlobalApiExceptionHandler {
 
 	@ExceptionHandler(StateConflictException.class)
 	public ResponseEntity<ApiErrorResponse> handleStateConflict(StateConflictException exception) {
-		String code = exception.getCode() == null ? "STATE_CONFLICT" : exception.getCode();
+		String code = exception.getCode() == null || exception.getCode().isBlank()
+				? "STATE_CONFLICT" : exception.getCode();
 		return error(HttpStatus.CONFLICT, code, exception.getMessage(), List.of());
 	}
 
@@ -110,6 +121,29 @@ public class GlobalApiExceptionHandler {
 				"STATE_CONFLICT",
 				"현재 데이터 상태에서는 요청을 처리할 수 없습니다.",
 				List.of());
+	}
+
+	@ExceptionHandler({ConcurrencyFailureException.class, OptimisticLockException.class,
+			PessimisticLockException.class, LockTimeoutException.class})
+	public ResponseEntity<ApiErrorResponse> handleConcurrencyFailure(Exception exception) {
+		log.warn("Concurrent API update rejected ({})", exception.getClass().getSimpleName());
+		return error(HttpStatus.CONFLICT, "STATE_CONFLICT",
+				"다른 요청이 데이터를 변경하고 있습니다. 최신 상태를 조회한 뒤 다시 시도해주세요.", List.of());
+	}
+
+	@ExceptionHandler(MissingServletRequestParameterException.class)
+	public ResponseEntity<ApiErrorResponse> handleMissingParameter(MissingServletRequestParameterException exception) {
+		return missingField(exception.getParameterName());
+	}
+
+	@ExceptionHandler(MissingServletRequestPartException.class)
+	public ResponseEntity<ApiErrorResponse> handleMissingPart(MissingServletRequestPartException exception) {
+		return missingField(exception.getRequestPartName());
+	}
+
+	private ResponseEntity<ApiErrorResponse> missingField(String name) {
+		return error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "요청 값을 확인해주세요.",
+				List.of(new FieldErrorDetail(name, "필수 값입니다.")));
 	}
 
 	@ExceptionHandler(NoResourceFoundException.class)
