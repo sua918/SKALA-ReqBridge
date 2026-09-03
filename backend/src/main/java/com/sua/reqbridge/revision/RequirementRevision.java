@@ -59,7 +59,7 @@ public class RequirementRevision {
 	@Column(name = "rejection_reason")
 	private String rejectionReason;
 
-	@ElementCollection(fetch = FetchType.LAZY)
+	@ElementCollection(fetch = FetchType.EAGER)
 	@CollectionTable(name = "revision_clarification", schema = "app",
 			joinColumns = @JoinColumn(name = "revision_id"))
 	private Set<ClarificationRef> basedOnClarifications = new LinkedHashSet<>();

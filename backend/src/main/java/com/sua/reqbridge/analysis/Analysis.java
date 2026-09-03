@@ -60,9 +60,11 @@ public class Analysis {
 	@Column(name = "retry_of_analysis_id")
 	private Long retryOfAnalysisId;
 
+	@JdbcTypeCode(SqlTypes.JSON)
 	@Column(name = "input_snapshot", nullable = false, columnDefinition = "jsonb")
 	private String inputSnapshot;
 
+	@JdbcTypeCode(SqlTypes.JSON)
 	@Column(columnDefinition = "jsonb")
 	private String result;
 
