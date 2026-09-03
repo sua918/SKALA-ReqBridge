@@ -7,6 +7,7 @@ const router = createRouter({
     {
       path: '/',
       component: AppLayout,
+      // route 추가
       children: [
         {
           path: '',
@@ -39,7 +40,7 @@ const router = createRouter({
           meta: {
             breadcrumb: [
               { label: '프로젝트', to: { name: 'project-list' } },
-              // 제목 API 연동 전: URL id 표시 (Step 4 이후 GET /documents/{id})
+              // 제목 API 연동 전: URL id 표시 (이후 GET /documents/{id})
               { dynamic: 'documentId', prefix: '문서 #' },
             ],
           },
@@ -51,7 +52,7 @@ const router = createRouter({
           meta: {
             breadcrumb: [
               { label: '프로젝트', to: { name: 'project-list' } },
-              // documentId는 Step 4 이후 GET /requirements/{id}로 채움
+              // documentId는 GET /requirements/{id}로 채움
               { label: '문서', skeleton: true },
               { dynamic: 'requirementId', prefix: '요구사항 #' },
             ],
