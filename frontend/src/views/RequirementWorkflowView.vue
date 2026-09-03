@@ -24,7 +24,14 @@ import {
 import { isContentVersionConflict } from '@/api/client'
 import AnalysisFailureBanner from '@/components/common/AnalysisFailureBanner.vue'
 import ErrorMessage from '@/components/common/ErrorMessage.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
+import KeyValueRows from '@/components/common/KeyValueRows.vue'
+import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import PageHero from '@/components/common/PageHero.vue'
+import PillButton from '@/components/common/PillButton.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import AmbiguityTypeBadge from '@/components/common/AmbiguityTypeBadge.vue'
+import ClarityJourney from '@/components/graphics/ClarityJourney.vue'
 import { resolveAmbiguityTypeLabel } from '@/components/common/ambiguityLabels.js'
 import { useAnalysisPoller } from '@/composables/useAnalysisPoller'
 import { useApiError } from '@/composables/useApiError'
@@ -144,6 +151,21 @@ const canRegenerate = computed(
     proposedRevision.value === null &&
     hasRejected.value,
 )
+
+/** 히어로에 얹는 요약. 표시용이라 조회 로직과 무관하다. */
+const chips = computed(() => [
+  { value: String(openIssueCount.value), label: '미해결 문제' },
+  { value: String(waitingCount.value), label: '답변 대기' },
+  { value: String(workflow.value?.revisions.length ?? 0), label: '수정안' },
+])
+
+/** 참조 열의 메타 표. 값은 전부 이미 받아 둔 응답에서 꺼낸다. */
+const metaRows = computed(() => [
+  { label: '요구사항', value: `${requirementId.value} · 순번 #${requirement.value?.sequenceNo ?? '-'}` },
+  { label: '문서', value: requirement.value?.documentId ?? '-' },
+  { label: '버전', value: contentVersion.value === null ? '-' : `v${contentVersion.value}` },
+  { label: '활성 작업', value: activeAnalysis.value ? `#${activeAnalysis.value.id}` : '없음' },
+])
 
 function clarificationLabel(clarification) {
   return clarification.roundNo + '회차'
@@ -330,18 +352,21 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="wf-page">
-    <header class="wf-header">
-      <h1>요구사항 #{{ requirement?.sequenceNo ?? requirementId }}</h1>
-      <p class="wf-meta">
-        요구사항 #{{ requirementId }}
-        <template v-if="status">
-          ·
-          <StatusBadge kind="requirement" :value="status" />
-        </template>
-        <template v-if="contentVersion !== null"> · 버전 v{{ contentVersion }}</template>
-      </p>
-    </header>
+  <div class="page">
+    <PageHero
+      num="04" eyebrow="요구사항 워크플로우" watermark="R" :chips="chips"
+    >
+      <template #title>Requirement</template>
+      <!-- 상태 배지는 #actions(버튼 자리)가 아니라 제목 옆에 둔다.
+           그 자리는 「누르는 것」 자리이고, 배지는 못 누른다. 그래픽 위에 얹히면
+           바탕이 계속 변해 읽히는 정도도 일정하지 않다. -->
+      <template #subject>
+        <span class="subjline">
+          #{{ requirement?.sequenceNo ?? requirementId }}
+          <StatusBadge v-if="status" kind="requirement" :value="status" />
+        </span>
+      </template>
+    </PageHero>
 
     <ErrorMessage v-if="hasError" :message="message" :field-errors="fieldErrors" />
 
@@ -350,471 +375,227 @@ onMounted(() => {
       두었으니, 바뀐 내용을 확인하고 다시 보내주세요.
     </p>
 
-    <p v-if="loading">불러오는 중…</p>
+    <LoadingSpinner v-if="loading" />
 
-    <template v-else-if="workflow">
-      <section class="panel">
-        <h2>원문</h2>
-        <pre class="content">{{ requirement?.originalText }}</pre>
-      </section>
+    <div v-else-if="workflow" class="grid12 split at-4">
+      <!-- 참조 열 -->
+      <div class="left stickycol" data-reveal>
+        <div class="card pad">
+          <div class="eb mb12">원문</div>
+          <p class="source">{{ requirement?.originalText }}</p>
+        </div>
 
-      <section v-if="requirement?.confirmedText" class="panel panel--confirmed">
-        <h2>확정본</h2>
-        <pre class="content">{{ requirement.confirmedText }}</pre>
-        <p class="hint">승인한 수정안 #{{ requirement.approvedRevisionId }}의 본문입니다.</p>
-      </section>
-
-      <p v-if="isLocked" class="notice notice--busy">
-        분석 작업 {{ activeAnalysis?.id }}이(가) 진행 중입니다. 끝날 때까지 답변 입력과 검토를
-        잠급니다.
-      </p>
-
-      <AnalysisFailureBanner
-        v-if="failedAnalysis"
-        :code="failedAnalysis.error?.code ?? ''"
-        :message="failedAnalysis.error?.message ?? '작업에 실패했습니다.'"
-        @retry="onRetry"
-      />
-
-      <section class="panel">
-        <h2>문제와 질문</h2>
-        <p class="summary">
-          미해결 문제 {{ openIssueCount }}건 · 답변 대기 질문 {{ waitingCount }}건
-        </p>
-
-        <p v-if="issueGroups.length === 0" class="empty">
-          이 요구사항에는 확인할 문제가 없습니다.
-        </p>
-
-        <article v-for="group in issueGroups" :key="group.issue.id" class="issue">
-          <div class="issue-head">
-            <span class="issue-type">{{ resolveAmbiguityTypeLabel(group.issue.type) }}</span>
-            <StatusBadge kind="issue" :value="group.issue.status" />
-            <span class="issue-id">문제 #{{ group.issue.id }}</span>
+        <div v-if="requirement?.confirmedText" class="card pad confirmed-card">
+          <div class="cardhead">
+            <span class="eb">확정본</span>
+            <StatusBadge kind="revision" value="APPROVED" />
           </div>
-          <p class="issue-evidence">근거 — {{ group.issue.evidence }}</p>
+          <p class="source">{{ requirement.confirmedText }}</p>
+          <p class="mi hint">승인한 수정안 #{{ requirement.approvedRevisionId }}의 본문입니다.</p>
+        </div>
 
-          <p v-if="group.rounds.length === 0" class="empty">
-            아직 이 문제로 만들어진 질문이 없습니다.
-          </p>
+        <div class="card pad quiet journey">
+          <div class="cardhead">
+            <span class="eb">명확도 여정</span>
+            <span v-if="contentVersion !== null" class="fig ver">v{{ contentVersion }}</span>
+          </div>
+          <ClarityJourney v-if="status" :status="status" />
+        </div>
+
+        <KeyValueRows label="이 요구사항" :rows="metaRows" label-width="106px" />
+      </div>
+
+      <!-- 작업 열 -->
+      <div class="right" data-reveal>
+        <div v-if="isLocked" class="sysnote" style="--tone: var(--on-blue)">
+          <span class="scan" aria-hidden="true" />
+          <div class="body">
+            <div class="head"><span class="k">분석 처리 중</span>
+              <span class="code">작업 {{ activeAnalysis?.id }}</span>
+            </div>
+            <p class="msg">끝날 때까지 답변 입력과 검토를 잠급니다.</p>
+          </div>
+        </div>
+
+        <AnalysisFailureBanner
+          v-if="failedAnalysis"
+          :code="failedAnalysis.error?.code ?? ''"
+          :message="failedAnalysis.error?.message ?? '작업에 실패했습니다.'"
+          @retry="onRetry"
+        />
+
+        <!-- 문제 · 질문 -->
+        <div v-for="group in issueGroups" :key="group.issue.id" class="card pad issue">
+          <div class="issuehead">
+            <span class="fig inum">{{ group.issue.id }}</span>
+            <AmbiguityTypeBadge :type="group.issue.type" />
+            <StatusBadge kind="issue" :value="group.issue.status" />
+          </div>
+          <p class="evidence">근거 — {{ group.issue.evidence }}</p>
 
           <div v-for="round in group.rounds" :key="round.id" class="round">
-            <div class="round-head">
-              <span class="round-no">{{ clarificationLabel(round) }}</span>
+            <div class="roundhead">
+              <span class="eb sm">{{ clarificationLabel(round) }}</span>
               <StatusBadge kind="clarification" :value="round.status" />
             </div>
             <p class="question">{{ round.questionText }}</p>
 
-            <p v-if="round.answerText" class="answer">{{ round.answerText }}</p>
+            <div v-if="round.answerText" class="answered">{{ round.answerText }}</div>
 
-            <!-- 답변 입력창이 열리는 유일한 상태는 WAITING (Spec 8절) -->
-            <div v-if="round.status === ClarificationStatus.WAITING" class="answer-form">
-              <label class="sr-only" :for="`answer-${round.id}`">답변</label>
+            <!-- 답변 입력창이 열리는 유일한 상태는 WAITING -->
+            <div v-if="round.status === ClarificationStatus.WAITING" class="answerbox">
               <textarea
-                :id="`answer-${round.id}`"
-                v-model="answerDrafts[round.id]"
-                class="answer-input"
-                rows="3"
+                v-model="answerDrafts[round.id]" class="field ta" rows="3"
                 :disabled="isLocked || isConfirmed"
                 placeholder="고객이 준 답변을 그대로 입력하세요."
               />
-              <div class="answer-actions">
-                <button
-                  type="button"
-                  class="btn-primary"
-                  :disabled="
-                    isLocked ||
-                    isConfirmed ||
-                    submittingClarificationId === round.id ||
-                    !(answerDrafts[round.id] ?? '').trim()
-                  "
+              <div class="answerfoot">
+                <PillButton
+                  variant="primary"
+                  :loading="submittingClarificationId === round.id"
+                  :disabled="isLocked || isConfirmed || !(answerDrafts[round.id] ?? '').trim()"
                   @click="onSubmitAnswer(round)"
-                >
-                  {{ submittingClarificationId === round.id ? '보내는 중…' : '답변 제출' }}
-                </button>
+                >답변 제출</PillButton>
               </div>
             </div>
           </div>
-        </article>
-      </section>
+        </div>
 
-      <section class="panel">
-        <h2>수정안</h2>
+        <EmptyState
+          v-if="issueGroups.length === 0"
+          title="확인할 문제가 없습니다"
+          description="이 요구사항에는 불명확한 표현이 발견되지 않았습니다."
+        />
 
-        <p v-if="!proposedRevision && reviewedRevisions.length === 0" class="empty">
-          모든 문제가 해결되면 수정안이 만들어집니다.
-        </p>
-
-        <article v-if="proposedRevision" class="revision revision--proposed">
-          <div class="revision-head">
-            <span class="revision-no">{{ proposedRevision.revisionNo }}차 수정안</span>
+        <!-- 검토 대기 수정안 -->
+        <div v-if="proposedRevision" class="card pad revision live">
+          <div class="cardhead">
+            <span class="eb">수정안 {{ proposedRevision.id }} · {{ proposedRevision.revisionNo }}차</span>
             <StatusBadge kind="revision" :value="proposedRevision.status" />
-            <span class="revision-version">
-              입력 버전 v{{ proposedRevision.inputContentVersion }}
-            </span>
           </div>
-          <pre class="content">{{ proposedRevision.text }}</pre>
-          <p v-if="proposedRevision.basedOnClarificationIds.length" class="hint">
+          <p class="revtext">{{ proposedRevision.text }}</p>
+          <p v-if="proposedRevision.basedOnClarificationIds.length" class="mi hint">
             근거 답변 — 질문 {{ proposedRevision.basedOnClarificationIds.join(', ') }}
+            · 입력 버전 v{{ proposedRevision.inputContentVersion }}
           </p>
 
           <div class="review">
-            <label class="review-label" for="rejection-reason">
-              거절 사유 · 거절할 때만 필요합니다
-            </label>
+            <span class="eb sm">거절 사유 · 거절할 때만 필요합니다</span>
             <textarea
-              id="rejection-reason"
-              v-model="rejectionReason"
-              class="answer-input"
-              rows="2"
-              :disabled="isLocked || reviewing"
+              v-model="rejectionReason" class="field ta" rows="2" :disabled="isLocked || reviewing"
               placeholder="어떤 점을 고쳐야 하는지 적어주세요. 최대 2000자."
             />
-            <div class="review-actions">
-              <button
-                type="button"
-                class="btn-primary"
-                :disabled="isLocked || reviewing"
-                @click="onReview(ReviewDecision.APPROVE)"
-              >
-                승인
-              </button>
-              <button
-                type="button"
-                class="btn-secondary"
-                :disabled="isLocked || reviewing || !rejectionReason.trim()"
+            <div class="reviewfoot">
+              <PillButton
+                variant="quiet" :disabled="isLocked || reviewing || !rejectionReason.trim()"
                 @click="onReview(ReviewDecision.REJECT)"
-              >
-                거절
-              </button>
+              >거절</PillButton>
+              <PillButton
+                variant="primary" :loading="reviewing" :disabled="isLocked"
+                @click="onReview(ReviewDecision.APPROVE)"
+              >승인</PillButton>
             </div>
           </div>
-        </article>
-
-        <div v-if="canRegenerate" class="regenerate">
-          <p class="hint">
-            거절한 수정안이 있고 모든 문제가 해결됐습니다. 거절 사유를 반영해 다시 만들 수 있습니다.
-          </p>
-          <button
-            type="button"
-            class="btn-primary"
-            :disabled="regenerating"
-            @click="onRegenerate"
-          >
-            {{ regenerating ? '요청 중…' : '수정안 다시 만들기' }}
-          </button>
         </div>
 
-        <article
-          v-for="revision in reviewedRevisions"
-          :key="revision.id"
-          class="revision revision--past"
-        >
-          <div class="revision-head">
-            <span class="revision-no">{{ revision.revisionNo }}차 수정안</span>
+        <div v-if="canRegenerate" class="card pad quiet">
+          <p class="mi hint mb12">
+            거절한 수정안이 있고 모든 문제가 해결됐습니다. 거절 사유를 반영해 다시 만들 수 있습니다.
+          </p>
+          <PillButton variant="primary" :loading="regenerating" @click="onRegenerate">
+            수정안 다시 만들기
+          </PillButton>
+        </div>
+
+        <!-- 검토를 마친 수정안 이력 -->
+        <div v-for="revision in reviewedRevisions" :key="revision.id" class="card pad revision past">
+          <div class="cardhead">
+            <span class="eb">수정안 {{ revision.id }} · {{ revision.revisionNo }}차</span>
             <StatusBadge kind="revision" :value="revision.status" />
-            <span class="revision-version">입력 버전 v{{ revision.inputContentVersion }}</span>
           </div>
-          <pre class="content">{{ revision.text }}</pre>
+          <p class="revtext">{{ revision.text }}</p>
           <p v-if="revision.rejectionReason" class="rejection">
             거절 사유 — {{ revision.rejectionReason }}
           </p>
-        </article>
-      </section>
-    </template>
-  </section>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.wf-page {
-  max-width: 880px;
-  margin: 0 auto;
-  padding: 24px 20px 48px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+/* 참조 4 : 주 작업 8. 전 화면이 같은 비율을 쓴다. */
+.left { grid-column: span 4; display: flex; flex-direction: column; gap: 18px; }
+.right { grid-column: span 8; display: flex; flex-direction: column; gap: 18px; }
+
+@media (max-width: 900px) {
+  .left, .right { grid-column: span 12; position: static; }
 }
 
-.wf-header h1 {
-  margin: 0 0 6px;
-  font-size: 1.5rem;
-}
+/* 제목 옆 상태. 부제 서체가 크므로 배지가 글자에 눌리지 않게 가운데를 맞춘다. */
+.subjline { display: inline-flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 
-.wf-meta {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  color: #64748b;
-  font-size: 0.875rem;
-}
+.mb12 { margin-bottom: 12px; }
+.source { margin: 0; font-size: var(--fs-sm); line-height: 1.9; color: var(--fg-800); word-break: keep-all; }
+.hint { font-size: var(--fs-sm); color: var(--fg-600); line-height: 1.7; margin: 10px 0 0; }
+.hint.mb12 { margin: 0 0 12px; }
+.ver { font-size: var(--fs-sm); color: var(--fg-600); }
 
-.panel {
-  padding: 16px 18px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  background: #ffffff;
-}
-
-.panel h2 {
-  margin: 0 0 12px;
-  font-size: 1rem;
-}
-
-.panel--confirmed {
-  border-color: #86efac;
-  background: #f0fdf4;
-}
-
-.content {
-  margin: 0;
-  padding: 12px 14px;
-  border-radius: 8px;
-  background: #f8fafc;
-  font-family: inherit;
-  font-size: 0.9375rem;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  word-break: keep-all;
-}
-
-.summary {
-  margin: 0 0 14px;
-  color: #475569;
-  font-size: 0.875rem;
-}
-
-.empty {
-  margin: 0;
-  color: #94a3b8;
-  font-size: 0.875rem;
-}
-
-.hint {
-  margin: 8px 0 0;
-  color: #64748b;
-  font-size: 0.8125rem;
-}
+/* 확정본은 「끝난 것」이라 초록 계열로 한 번만 표시한다. */
+.confirmed-card { border-color: var(--green-bd); background: color-mix(in srgb, var(--green-bg) 45%, var(--bg-0)); }
+.journey { padding-bottom: 22px; }
 
 .notice {
-  margin: 0;
-  padding: 12px 14px;
-  border-radius: 8px;
-  font-size: 0.875rem;
-}
-
-.notice--busy {
-  border: 1px solid #bfdbfe;
-  background: #eff6ff;
-  color: #1d4ed8;
-}
-
-.notice--stale {
-  border: 1px solid #fcd34d;
-  background: #fffbeb;
-  color: #92400e;
-  line-height: 1.6;
+  margin: 0 0 18px;
+  padding: 13px 16px;
+  border-radius: var(--radius-card);
+  font-size: var(--fs-sm);
+  line-height: 1.7;
   word-break: keep-all;
 }
+.notice--stale { border: 1px solid var(--amber-bd); background: var(--amber-bg); color: var(--amber-tx); }
 
-.issue {
-  padding: 14px 0 4px;
-  border-top: 1px solid #f1f5f9;
-}
+.issuehead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.inum { font-size: 15px; color: var(--fg-400); }
+.evidence { margin: 0 0 4px; font-size: var(--fs-sm); color: var(--fg-600); line-height: 1.7; word-break: keep-all; }
 
-.issue:first-of-type {
-  border-top: 0;
-  padding-top: 0;
-}
+/* 회차는 문제 아래에 딸린 대화다. 들여쓰기로 소속을 보인다. */
+.round { margin-top: 16px; padding-top: 15px; border-top: 1px solid var(--rule); }
+.roundhead { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+.eb.sm { font-size: var(--fs-micro); }
+.question { margin: 0; font-size: var(--fs-sm); line-height: 1.75; color: var(--fg-950); word-break: keep-all; }
 
-.issue-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.issue-type {
-  font-weight: 600;
-  font-size: 0.9375rem;
-}
-
-.issue-id {
-  color: #94a3b8;
-  font-size: 0.8125rem;
-}
-
-.issue-evidence {
-  margin: 6px 0 12px;
-  color: #475569;
-  font-size: 0.875rem;
-}
-
-.round {
-  margin-left: 12px;
-  padding: 10px 0 12px 12px;
-  border-left: 2px solid #e2e8f0;
-}
-
-.round-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.round-no {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #475569;
-}
-
-.question {
-  margin: 6px 0 0;
-  font-size: 0.9375rem;
-  line-height: 1.6;
-  word-break: keep-all;
-}
-
-.answer {
-  margin: 8px 0 0;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: #f1f5f9;
-  font-size: 0.875rem;
-  line-height: 1.6;
-  word-break: keep-all;
-}
-
-.answer-form {
+.answered {
   margin-top: 10px;
+  padding: 11px 14px;
+  border-radius: var(--radius-card);
+  background: var(--bg-100);
+  border: 1px solid var(--bg-200);
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+  color: var(--fg-700);
+  word-break: keep-all;
 }
 
-.answer-input {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  font: inherit;
-  font-size: 0.875rem;
-  line-height: 1.6;
-  resize: vertical;
-}
+.answerbox { margin-top: 12px; }
+.ta { resize: vertical; line-height: 1.7; }
+.answerfoot, .reviewfoot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 
-.answer-input:disabled {
-  background: #f8fafc;
-  color: #94a3b8;
-}
+.revtext { margin: 0; font-size: var(--fs-lead); line-height: 1.8; color: var(--fg-950); word-break: keep-all; }
+.revision.past .revtext { font-size: var(--fs-sm); color: var(--fg-600); }
 
-.answer-actions,
-.review-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.revision {
-  padding: 14px 0;
-  border-top: 1px solid #f1f5f9;
-}
-
-.revision:first-of-type {
-  border-top: 0;
-  padding-top: 0;
-}
-
-.revision--past .content {
-  color: #64748b;
-}
-
-.revision-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
-}
-
-.revision-no {
-  font-weight: 600;
-  font-size: 0.9375rem;
-}
-
-.revision-version {
-  color: #94a3b8;
-  font-size: 0.8125rem;
-}
+.review { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--rule); }
+.review .eb.sm { display: block; margin-bottom: 8px; }
 
 .rejection {
-  margin: 8px 0 0;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: #fef2f2;
-  color: #991b1b;
-  font-size: 0.875rem;
-  line-height: 1.6;
+  margin: 12px 0 0;
+  padding: 11px 14px;
+  border-radius: var(--radius-card);
+  background: var(--red-bg);
+  border: 1px solid var(--red-bd);
+  color: var(--red-tx);
+  font-size: var(--fs-sm);
+  line-height: 1.7;
   word-break: keep-all;
-}
-
-.review {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px dashed #e2e8f0;
-}
-
-.review-label {
-  display: block;
-  margin-bottom: 6px;
-  color: #475569;
-  font-size: 0.8125rem;
-}
-
-.regenerate {
-  margin-top: 12px;
-  padding: 12px 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #f8fafc;
-}
-
-.regenerate .hint {
-  margin: 0 0 10px;
-}
-
-.btn-primary,
-.btn-secondary {
-  padding: 8px 16px;
-  border-radius: 8px;
-  font: inherit;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.btn-primary {
-  border: 1px solid #2563eb;
-  background: #2563eb;
-  color: #ffffff;
-}
-
-.btn-secondary {
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-  color: #b91c1c;
-}
-
-.btn-primary:disabled,
-.btn-secondary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
 }
 </style>

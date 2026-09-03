@@ -5,6 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="ReqBridge frontend scaffold" />
     <title>ReqBridge</title>
+
+    <!-- 탭 아이콘. 로고 마크를 정사각 캔버스 가운데에 놓아 만들었다.
+         원본(240x205)이 정사각이 아니라 그대로 걸면 탭에서 눌리거나 치우친다. -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+
+    <!--
+      서체 4종. 역할이 겹치지 않게 하나씩만 맡긴다.
+
+      Archivo (700-900)        영문 대제목. 페이지 제목이 Projects·Requirement 같은
+        영단어라 라틴 전용 그로테스크를 앞에 세웠다. 한글용 서체에 딸려온 라틴은
+        긴 영단어에서 자간·무게가 무너진다.
+      SUITE Variable           제목의 한글 부분과 워드마크. 헤드라인용이라 굵기 대비가 크다.
+      Pretendard Variable      본문·UI 전부. 라틴이 Inter 계열이라 한글과 한 서체처럼 붙는다.
+        enum(EXTRACTED·CONFIRMED)이 자주 나오는 화면이라 라틴 품질이 중요하다.
+      JetBrains Mono           계측 라벨과 숫자 표기(버전·순번·ID). 등폭이라 목록에서
+        자리수가 어긋나지 않는다. 한글은 Pretendard로 자동 폴백한다.
+    -->
+    <link rel="stylesheet" as="style" crossorigin
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
+    <link rel="stylesheet" as="style" crossorigin
+      href="https://cdn.jsdelivr.net/gh/sunn-us/SUITE/fonts/variable/woff2/SUITE-Variable.css" />
+    <link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" />
   </head>
   <body>
     <div id="app"></div>
