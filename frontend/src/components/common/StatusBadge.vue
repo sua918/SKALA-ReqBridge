@@ -75,7 +75,8 @@ const tone = computed(() => resolveStatusTone(props.kind, props.value))
    같은 「진행 중」이지만 보완 답변 필요(고객 답변 대기)와는 할 일이 다르다. */
 .status-badge--purple { color: var(--purple-tx); }
 
-/* 불명확성 발견 · 답변 대기 · 미해결 — 사람의 손이 필요한 상태 */
+/* 불명확성 발견 · 답변 대기 · 미해결 — 사람의 손이 필요한 상태.
+   --amber-tx(#624001)는 갈색에 가까워 먹글자와 구별이 안 됐다. 한 단 올려 호박으로 읽히게 한다. */
 .status-badge--warn { color: var(--amber-so); }
 
 /* 확정 완료 · 완료 · 해결 · 승인 — 끝난 상태 */
