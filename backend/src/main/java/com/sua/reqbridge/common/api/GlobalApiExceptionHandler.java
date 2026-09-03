@@ -42,7 +42,8 @@ public class GlobalApiExceptionHandler {
 
 	@ExceptionHandler(StateConflictException.class)
 	public ResponseEntity<ApiErrorResponse> handleStateConflict(StateConflictException exception) {
-		return error(HttpStatus.CONFLICT, "STATE_CONFLICT", exception.getMessage(), List.of());
+		String code = exception.getCode() == null ? "STATE_CONFLICT" : exception.getCode();
+		return error(HttpStatus.CONFLICT, code, exception.getMessage(), List.of());
 	}
 
 	@ExceptionHandler(MethodArgumentNotValidException.class)
