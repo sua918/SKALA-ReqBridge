@@ -38,7 +38,8 @@ class DocumentAnalysisServiceTests {
 		CoreRequirementPort core = mock(CoreRequirementPort.class);
 		ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
 		ObjectMapper json = new ObjectMapper();
-		Analysis analysis = Analysis.pendingDocument(101, "{\"documentId\":101}");
+		Analysis analysis = Analysis.pendingDocument(101,
+				json.writeValueAsString(new DocumentAnalysisService.DocumentInput(101, "TEXT", CONTENT)));
 		ReflectionTestUtils.setField(analysis, "id", 301L);
 		when(analyses.findById(301L)).thenReturn(java.util.Optional.of(analysis));
 		when(core.getDocument(101L)).thenReturn(new DocumentSnapshot(101, 1, "성능 요구", CONTENT, "TEXT"));

@@ -10,16 +10,29 @@ import com.sua.reqbridge.common.validation.TextRules;
 import com.sua.reqbridge.project.ProjectNotFoundException;
 import com.sua.reqbridge.project.ProjectRepository;
 
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.lang.Nullable;
+
+import com.sua.reqbridge.contract.DocumentRegisteredEvent;
+
 @Service
 @Transactional(readOnly = true)
 public class DocumentService {
 
 	private final DocumentRepository documentRepository;
 	private final ProjectRepository projectRepository;
+	private final ApplicationEventPublisher events;
 
 	public DocumentService(DocumentRepository documentRepository, ProjectRepository projectRepository) {
+		this(documentRepository, projectRepository, null);
+	}
+
+	@org.springframework.beans.factory.annotation.Autowired
+	public DocumentService(DocumentRepository documentRepository, ProjectRepository projectRepository,
+			@Nullable ApplicationEventPublisher events) {
 		this.documentRepository = documentRepository;
 		this.projectRepository = projectRepository;
+		this.events = events;
 	}
 
 	@Transactional
@@ -30,8 +43,12 @@ public class DocumentService {
 		String normalizedTitle = TextRules.requiredTrimmed("Document title", title, 200);
 		String preservedContent = TextRules.requiredPreserved("Document content", content, 100_000);
 
-		return documentRepository.save(
+		Document saved = documentRepository.save(
 				new Document(projectId, normalizedTitle, preservedContent, DocumentSourceType.TEXT));
+		if (events != null) {
+			events.publishEvent(new DocumentRegisteredEvent(saved.getId()));
+		}
+		return saved;
 	}
 
 	public Document get(long documentId) {
