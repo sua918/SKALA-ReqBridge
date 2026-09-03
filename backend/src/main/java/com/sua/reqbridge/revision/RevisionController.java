@@ -19,6 +19,7 @@ import com.sua.reqbridge.contract.AnalysisKind;
 import com.sua.reqbridge.contract.AnalysisStatus;
 import com.sua.reqbridge.contract.RequirementSnapshot;
 import com.sua.reqbridge.contract.RequirementStatus;
+import com.sua.reqbridge.contract.RevisionSource;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -57,6 +58,17 @@ public class RevisionController {
 				RequirementView.from(result.requirement()))));
 	}
 
+	@PostMapping("/requirements/{requirementId}/confirm")
+	public ResponseEntity<Data<ConfirmResultView>> directConfirm(
+			@PathVariable long requirementId,
+			@RequestBody ConfirmRequest request) {
+		RevisionWorkflowService.ReviewResult result = service.directConfirm(
+				requirementId, request.expectedContentVersion());
+		return ResponseEntity.ok(new Data<>(new ConfirmResultView(
+				RequirementView.from(result.requirement()),
+				RevisionView.from(result.revision()))));
+	}
+
 	private AnalysisView analysisView(Analysis value) {
 		if (value == null) {
 			return null;
@@ -82,6 +94,13 @@ public class RevisionController {
 		}
 	}
 
+	record ConfirmRequest(long expectedContentVersion) {
+		@JsonAnySetter
+		void rejectUnknown(String name, Object value) {
+			throw new IllegalArgumentException("정의되지 않은 필드입니다: " + name);
+		}
+	}
+
 	record Data<T>(T data) {
 	}
 
@@ -93,12 +112,13 @@ public class RevisionController {
 			Instant createdAt, Instant startedAt, Instant completedAt, Object result, Failure error) {
 	}
 
-	record RevisionView(long id, long requirementId, int revisionNo, String text, Object status,
+	record RevisionView(long id, long requirementId, int revisionNo, String text,
+			RevisionSource source, Object status,
 			long inputContentVersion, List<Long> basedOnClarificationIds,
 			String rejectionReason, List<Object> acceptanceCriteria) {
 		static RevisionView from(RequirementRevision revision) {
 			return new RevisionView(revision.getId(), revision.getRequirementId(), revision.getRevisionNo(),
-					revision.getText(), revision.getStatus(), revision.getInputContentVersion(),
+					revision.getText(), revision.getSource(), revision.getStatus(), revision.getInputContentVersion(),
 					List.copyOf(revision.getBasedOnClarificationIds()), revision.getRejectionReason(), List.of());
 		}
 	}
@@ -114,5 +134,8 @@ public class RevisionController {
 	}
 
 	record ReviewResultView(RevisionView revision, RequirementView requirement) {
+	}
+
+	record ConfirmResultView(RequirementView requirement, RevisionView revision) {
 	}
 }

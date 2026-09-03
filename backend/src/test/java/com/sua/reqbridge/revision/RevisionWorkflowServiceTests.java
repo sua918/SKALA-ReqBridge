@@ -28,10 +28,12 @@ import com.sua.reqbridge.clarification.Clarification;
 import com.sua.reqbridge.clarification.ClarificationRepository;
 import com.sua.reqbridge.contract.AnalysisKind;
 import com.sua.reqbridge.contract.AnalysisStatus;
+import com.sua.reqbridge.contract.ClarificationStatus;
 import com.sua.reqbridge.contract.CoreRequirementPort;
 import com.sua.reqbridge.contract.IssueStatus;
 import com.sua.reqbridge.contract.RequirementSnapshot;
 import com.sua.reqbridge.contract.RequirementStatus;
+import com.sua.reqbridge.contract.RevisionSource;
 import com.sua.reqbridge.contract.RevisionStatus;
 import com.sua.reqbridge.contract.StateConflictException;
 
@@ -368,5 +370,157 @@ class RevisionWorkflowServiceTests {
 		new RevisionAnalysisWorker(mockService, failures).run(new RevisionAnalysisRequested(307L));
 
 		verify(failures).fail(307L, "AI_OUTPUT_INVALID", "분석 결과 형식이 올바르지 않습니다.");
+	}
+
+	@Test
+	void directConfirmSuccess() {
+		long requirementId = 401L;
+		long version = 1L;
+		String originalText = "관리자는 보고서를 다운로드할 수 있어야 한다.";
+
+		RequirementSnapshot extracted = new RequirementSnapshot(
+				requirementId, 101L, 301L, 1, originalText, RequirementStatus.EXTRACTED, version, null, null);
+		RequirementSnapshot confirmed = new RequirementSnapshot(
+				requirementId, 101L, 301L, 1, originalText, RequirementStatus.CONFIRMED, version, 801L, originalText);
+
+		when(core.lockRequirement(requirementId)).thenReturn(extracted);
+		when(issues.countByRequirementIdAndStatus(requirementId, IssueStatus.OPEN)).thenReturn(0L);
+		when(clarifications.countByRequirementIdAndStatus(requirementId, ClarificationStatus.WAITING)).thenReturn(0L);
+		when(analyses.existsByRequirementIdAndStatusIn(eq(requirementId), any())).thenReturn(false);
+		when(revisions.existsByRequirementIdAndStatus(requirementId, RevisionStatus.PROPOSED)).thenReturn(false);
+		when(revisions.findTopByRequirementIdOrderByRevisionNoDesc(requirementId)).thenReturn(Optional.empty());
+
+		when(revisions.save(any(RequirementRevision.class))).thenAnswer(inv -> {
+			RequirementRevision r = inv.getArgument(0);
+			ReflectionTestUtils.setField(r, "id", 801L);
+			return r;
+		});
+		when(core.getRequirement(requirementId)).thenReturn(confirmed);
+
+		RevisionWorkflowService.ReviewResult result = service.directConfirm(requirementId, version);
+
+		assertThat(result.requirement().status()).isEqualTo(RequirementStatus.CONFIRMED);
+		assertThat(result.requirement().approvedRevisionId()).isEqualTo(801L);
+		assertThat(result.revision().getText()).isEqualTo(originalText);
+		assertThat(result.revision().getSource()).isEqualTo(RevisionSource.MANUAL);
+		assertThat(result.revision().getStatus()).isEqualTo(RevisionStatus.APPROVED);
+		assertThat(result.revision().getBasedOnClarificationIds()).isEmpty();
+
+		verify(core).changeStatus(requirementId, version, RequirementStatus.IN_REVIEW);
+		verify(core).confirmRequirement(requirementId, version, 801L, originalText);
+	}
+
+	@Test
+	void directConfirmRejectsInvalidVersion() {
+		assertThatThrownBy(() -> service.directConfirm(401L, 0L))
+				.isInstanceOf(IllegalArgumentException.class)
+				.hasMessageContaining("expectedContentVersion");
+	}
+
+	@Test
+	void directConfirmRejectsVersionMismatch() {
+		RequirementSnapshot extracted = new RequirementSnapshot(
+				401L, 101L, 301L, 1, "text", RequirementStatus.EXTRACTED, 1L, null, null);
+		when(core.lockRequirement(401L)).thenReturn(extracted);
+
+		assertThatThrownBy(() -> service.directConfirm(401L, 2L))
+				.isInstanceOf(StateConflictException.class)
+				.satisfies(e -> assertThat(((StateConflictException) e).getCode()).isEqualTo("CONTENT_VERSION_CONFLICT"));
+	}
+
+	@Test
+	void directConfirmRejectsWhenNotExtracted() {
+		RequirementSnapshot clarifying = new RequirementSnapshot(
+				401L, 101L, 301L, 1, "text", RequirementStatus.CLARIFYING, 1L, null, null);
+		when(core.lockRequirement(401L)).thenReturn(clarifying);
+
+		assertThatThrownBy(() -> service.directConfirm(401L, 1L))
+				.isInstanceOf(StateConflictException.class)
+				.satisfies(e -> assertThat(((StateConflictException) e).getCode()).isEqualTo("REQUIREMENT_NOT_DIRECTLY_CONFIRMABLE"));
+	}
+
+	@Test
+	void directConfirmRejectsWhenOpenIssuesRemain() {
+		RequirementSnapshot extracted = new RequirementSnapshot(
+				401L, 101L, 301L, 1, "text", RequirementStatus.EXTRACTED, 1L, null, null);
+		when(core.lockRequirement(401L)).thenReturn(extracted);
+		when(issues.countByRequirementIdAndStatus(401L, IssueStatus.OPEN)).thenReturn(1L);
+
+		assertThatThrownBy(() -> service.directConfirm(401L, 1L))
+				.isInstanceOf(StateConflictException.class)
+				.satisfies(e -> assertThat(((StateConflictException) e).getCode()).isEqualTo("OPEN_ISSUES_REMAIN"));
+	}
+
+	@Test
+	void directConfirmRejectsWhenWaitingClarificationsRemain() {
+		RequirementSnapshot extracted = new RequirementSnapshot(
+				401L, 101L, 301L, 1, "text", RequirementStatus.EXTRACTED, 1L, null, null);
+		when(core.lockRequirement(401L)).thenReturn(extracted);
+		when(issues.countByRequirementIdAndStatus(401L, IssueStatus.OPEN)).thenReturn(0L);
+		when(clarifications.countByRequirementIdAndStatus(401L, ClarificationStatus.WAITING)).thenReturn(1L);
+
+		assertThatThrownBy(() -> service.directConfirm(401L, 1L))
+				.isInstanceOf(StateConflictException.class)
+				.satisfies(e -> assertThat(((StateConflictException) e).getCode()).isEqualTo("OPEN_ISSUES_REMAIN"));
+	}
+
+	@Test
+	void directConfirmRejectsWhenAnalysisInProgress() {
+		RequirementSnapshot extracted = new RequirementSnapshot(
+				401L, 101L, 301L, 1, "text", RequirementStatus.EXTRACTED, 1L, null, null);
+		when(core.lockRequirement(401L)).thenReturn(extracted);
+		when(issues.countByRequirementIdAndStatus(401L, IssueStatus.OPEN)).thenReturn(0L);
+		when(clarifications.countByRequirementIdAndStatus(401L, ClarificationStatus.WAITING)).thenReturn(0L);
+		when(analyses.existsByRequirementIdAndStatusIn(eq(401L), any())).thenReturn(true);
+
+		assertThatThrownBy(() -> service.directConfirm(401L, 1L))
+				.isInstanceOf(StateConflictException.class)
+				.satisfies(e -> assertThat(((StateConflictException) e).getCode()).isEqualTo("ANALYSIS_IN_PROGRESS"));
+	}
+
+	@Test
+	void directConfirmRejectsWhenProposedRevisionExists() {
+		RequirementSnapshot extracted = new RequirementSnapshot(
+				401L, 101L, 301L, 1, "text", RequirementStatus.EXTRACTED, 1L, null, null);
+		when(core.lockRequirement(401L)).thenReturn(extracted);
+		when(issues.countByRequirementIdAndStatus(401L, IssueStatus.OPEN)).thenReturn(0L);
+		when(clarifications.countByRequirementIdAndStatus(401L, ClarificationStatus.WAITING)).thenReturn(0L);
+		when(analyses.existsByRequirementIdAndStatusIn(eq(401L), any())).thenReturn(false);
+		when(revisions.existsByRequirementIdAndStatus(401L, RevisionStatus.PROPOSED)).thenReturn(true);
+
+		assertThatThrownBy(() -> service.directConfirm(401L, 1L))
+				.isInstanceOf(StateConflictException.class)
+				.satisfies(e -> assertThat(((StateConflictException) e).getCode()).isEqualTo("REQUIREMENT_NOT_DIRECTLY_CONFIRMABLE"));
+	}
+
+	@Test
+	void directConfirmIdempotentWhenAlreadyConfirmed() {
+		RequirementSnapshot confirmed = new RequirementSnapshot(
+				401L, 101L, 301L, 1, "text", RequirementStatus.CONFIRMED, 1L, 801L, "text");
+		when(core.lockRequirement(401L)).thenReturn(confirmed);
+
+		RequirementRevision approvedRevision = RequirementRevision.proposed(
+				401L, 1, "text", 1L, List.of(), RevisionSource.MANUAL);
+		ReflectionTestUtils.setField(approvedRevision, "id", 801L);
+		approvedRevision.approve();
+
+		when(revisions.findById(801L)).thenReturn(Optional.of(approvedRevision));
+
+		RevisionWorkflowService.ReviewResult result = service.directConfirm(401L, 1L);
+
+		assertThat(result.requirement().status()).isEqualTo(RequirementStatus.CONFIRMED);
+		assertThat(result.revision().getId()).isEqualTo(801L);
+		verify(revisions, never()).save(any());
+	}
+
+	@Test
+	void directConfirmRejectsConfirmedWhenVersionMismatch() {
+		RequirementSnapshot confirmed = new RequirementSnapshot(
+				401L, 101L, 301L, 1, "text", RequirementStatus.CONFIRMED, 2L, 801L, "text");
+		when(core.lockRequirement(401L)).thenReturn(confirmed);
+
+		assertThatThrownBy(() -> service.directConfirm(401L, 1L))
+				.isInstanceOf(StateConflictException.class)
+				.satisfies(e -> assertThat(((StateConflictException) e).getCode()).isEqualTo("CONTENT_VERSION_CONFLICT"));
 	}
 }

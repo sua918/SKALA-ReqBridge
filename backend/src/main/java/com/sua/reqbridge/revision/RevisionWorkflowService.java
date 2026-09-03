@@ -16,11 +16,13 @@ import com.sua.reqbridge.analysis.AnalysisRepository;
 import com.sua.reqbridge.clarification.Clarification;
 import com.sua.reqbridge.clarification.ClarificationRepository;
 import com.sua.reqbridge.contract.AnalysisStatus;
+import com.sua.reqbridge.contract.ClarificationStatus;
 import com.sua.reqbridge.contract.CoreRequirementPort;
 import com.sua.reqbridge.contract.IssueStatus;
 import com.sua.reqbridge.contract.RequirementSnapshot;
 import com.sua.reqbridge.contract.RequirementStatus;
 import com.sua.reqbridge.contract.ResourceNotFoundException;
+import com.sua.reqbridge.contract.RevisionSource;
 import com.sua.reqbridge.contract.RevisionStatus;
 import com.sua.reqbridge.contract.StateConflictException;
 import com.sua.reqbridge.contract.ai.RevisionGenerationInput;
@@ -243,6 +245,71 @@ public class RevisionWorkflowService {
 		}
 		return normalized;
 	}
+
+	@Transactional
+	public ReviewResult directConfirm(long requirementId, long expectedVersion) {
+		if (expectedVersion < 1 || expectedVersion > 9_007_199_254_740_991L) {
+			throw new IllegalArgumentException("expectedContentVersion은 유효한 양수여야 합니다.");
+		}
+		RequirementSnapshot requirement = core.lockRequirement(requirementId);
+
+		// 멱등성 처리: 이미 확정된 요구사항인 경우
+		if (requirement.status() == RequirementStatus.CONFIRMED) {
+			if (requirement.contentVersion() != expectedVersion) {
+				throw new StateConflictException("CONTENT_VERSION_CONFLICT", "요구사항 버전이 일치하지 않습니다.");
+			}
+			Long approvedRevId = requirement.approvedRevisionId();
+			if (approvedRevId != null) {
+				RequirementRevision approvedRevision = revisions.findById(approvedRevId).orElse(null);
+				if (approvedRevision != null) {
+					return new ReviewResult(approvedRevision, requirement);
+				}
+			}
+			throw new StateConflictException("REQUIREMENT_NOT_DIRECTLY_CONFIRMABLE", "확정된 요구사항의 승인 수정안 정보를 찾을 수 없습니다.");
+		}
+
+		if (requirement.status() != RequirementStatus.EXTRACTED) {
+			throw new StateConflictException("REQUIREMENT_NOT_DIRECTLY_CONFIRMABLE", "EXTRACTED 상태의 요구사항만 직접 승인할 수 있습니다.");
+		}
+		if (requirement.contentVersion() != expectedVersion) {
+			throw new StateConflictException("CONTENT_VERSION_CONFLICT", "요구사항 버전이 일치하지 않습니다.");
+		}
+		if (issues.countByRequirementIdAndStatus(requirementId, IssueStatus.OPEN) > 0
+				|| clarifications.countByRequirementIdAndStatus(requirementId, ClarificationStatus.WAITING) > 0) {
+			throw new StateConflictException("OPEN_ISSUES_REMAIN", "미해결된 불명확성 문제가 남아 있어 직접 승인할 수 없습니다.");
+		}
+		if (analyses.existsByRequirementIdAndStatusIn(requirementId, ACTIVE)) {
+			throw new StateConflictException("ANALYSIS_IN_PROGRESS", "요구사항 분석이 진행 중입니다.");
+		}
+		if (revisions.existsByRequirementIdAndStatus(requirementId, RevisionStatus.PROPOSED)) {
+			throw new StateConflictException("REQUIREMENT_NOT_DIRECTLY_CONFIRMABLE", "검토 대기 중인 수정안이 존재합니다.");
+		}
+		if (requirement.approvedRevisionId() != null || requirement.confirmedText() != null) {
+			throw new StateConflictException("REQUIREMENT_NOT_DIRECTLY_CONFIRMABLE", "이미 승인된 수정안 또는 확정 본문이 존재합니다.");
+		}
+
+		int nextRevisionNo = revisions.findTopByRequirementIdOrderByRevisionNoDesc(requirementId)
+				.map(RequirementRevision::getRevisionNo).orElse(0) + 1;
+
+		RequirementRevision revision = RequirementRevision.proposed(
+				requirementId,
+				nextRevisionNo,
+				requirement.originalText(),
+				expectedVersion,
+				List.of(),
+				RevisionSource.MANUAL);
+
+		core.changeStatus(requirementId, expectedVersion, RequirementStatus.IN_REVIEW);
+
+		revision.approve();
+		RequirementRevision savedRevision = revisions.save(revision);
+
+		core.confirmRequirement(requirementId, expectedVersion, savedRevision.getId(), savedRevision.getText());
+		RequirementSnapshot updated = core.getRequirement(requirementId);
+
+		return new ReviewResult(savedRevision, updated);
+	}
+
 
 	public record ReviewResult(RequirementRevision revision, RequirementSnapshot requirement) {
 	}
