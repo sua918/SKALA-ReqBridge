@@ -35,7 +35,17 @@ defineProps({
 }
 .pill:not(:disabled):hover .sweep { transform: translateX(100%); }
 .ghost .sweep, .quiet .sweep { background: linear-gradient(90deg, transparent, rgba(52, 72, 180, .14), transparent); }
-.pill:disabled { opacity: .38; cursor: not-allowed; }
+/* 못 누르는 버튼은 색을 잃어야 한다. opacity만 낮추면 보라색이 옅게 남아
+   「누를 수 있는데 흐린 것」처럼 보인다. 회색으로 바꿔 성질 자체를 바꾼다. */
+.pill:disabled {
+  background: var(--bg-200);
+  border-color: var(--bg-200);
+  color: var(--fg-400);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.pill:disabled .sweep { display: none; }
 .pill:not(:disabled):hover { transform: translateY(-1px); }
 .pill:focus-visible { outline: 2px solid var(--primary-600); outline-offset: 2px; }
 

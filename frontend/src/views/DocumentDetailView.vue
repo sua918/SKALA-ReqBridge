@@ -254,7 +254,9 @@ onMounted(() => {
     <div v-else-if="document" class="grid12 split at-4">
       <!-- 참조 열: 원문과 분석 -->
       <div class="left stickycol" data-reveal>
-        <div class="card pad">
+        <!-- 원문은 「읽는 곳」이라 한 톤 내린다. 아래 분석 카드(버튼이 있는 「하는 곳」)와
+             같은 흰 판이면 눈이 어디부터 봐야 할지 알 수 없다. -->
+        <div class="card pad quiet">
           <div class="cardhead">
             <span class="eb">원문</span>
             <span class="mi len">{{ [...(document.content ?? '')].length.toLocaleString() }}자</span>

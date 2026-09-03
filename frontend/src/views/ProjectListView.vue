@@ -101,13 +101,13 @@ onMounted(() => {
             class="prow row stagger-child"
             @click="openProject(project.id)"
           >
+            <span class="fig pid">{{ project.id }}</span>
             <div class="pbody">
               <div class="hd pname">{{ project.name }}</div>
               <div class="mi pdesc" :class="{ none: !project.description }">
                 {{ project.description || '설명 없음' }}
               </div>
             </div>
-            <span class="fig pid">#{{ project.id }}</span>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--fg-400)"
                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="arrow">
               <path d="M5 12h14M13 6l6 6-6 6" />
@@ -133,7 +133,7 @@ onMounted(() => {
 
         <label class="lbl">
           <span class="eb sm">설명 · 선택</span>
-          <textarea v-model="description" class="field ta" rows="3" maxlength="2000"
+          <textarea v-model="description" class="field ta" rows="2" maxlength="2000"
                     placeholder="한 줄 설명" />
         </label>
 
@@ -160,9 +160,12 @@ onMounted(() => {
 }
 
 /* 좌우 여백과 마지막 줄 밑줄은 .card.list가 맡는다. */
+/* 식별자를 앞에 둔다. 문서 목록이 「102 · 제목」 순서인데 프로젝트만 이름이
+   먼저고 ID가 화면 끝에 있으면, 같은 서비스 안에서 읽는 규칙이 둘이 된다.
+   시선도 행 끝까지 갔다 돌아와야 한다. */
 .prow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 64px 22px;
+  grid-template-columns: 52px minmax(0, 1fr) 22px;
   gap: 16px;
   align-items: center;
   width: 100%;
@@ -207,7 +210,7 @@ onMounted(() => {
   overflow: hidden;
 }
 .pdesc.none { color: var(--fg-300); }
-.pid { font-size: var(--fs-sm); color: var(--accent-700); justify-self: end; }
+.pid { font-size: 16px; color: var(--accent-700); align-self: start; padding-top: 1px; }
 .arrow { justify-self: end; transition: transform .3s var(--ease); }
 
 .form { display: flex; flex-direction: column; }

@@ -380,7 +380,8 @@ onMounted(() => {
     <div v-else-if="workflow" class="grid12 split at-4">
       <!-- 참조 열 -->
       <div class="left stickycol" data-reveal>
-        <div class="card pad">
+        <!-- 참조 기둥의 원문·여정·메타는 전부 「읽는 곳」이다. -->
+        <div class="card pad quiet">
           <div class="eb mb12">원문</div>
           <p class="source">{{ requirement?.originalText }}</p>
         </div>
@@ -402,7 +403,7 @@ onMounted(() => {
           <ClarityJourney v-if="status" :status="status" />
         </div>
 
-        <KeyValueRows label="이 요구사항" :rows="metaRows" label-width="106px" />
+        <KeyValueRows label="이 요구사항" :rows="metaRows" label-width="106px" class="quiet" />
       </div>
 
       <!-- 작업 열 -->
