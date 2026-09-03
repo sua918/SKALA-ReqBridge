@@ -17,7 +17,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <main class="setup-card">
+  <!-- <main class="setup-card">
     <p class="eyebrow">ReqBridge</p>
     <h1>프로젝트 초기 설정 완료</h1>
     <p class="description">Vue와 Spring Boot의 개발 환경이 준비되었습니다.</p>
@@ -25,5 +25,7 @@ onMounted(async () => {
       <span class="status-dot" aria-hidden="true"></span>
       Backend: {{ connectionStatus }}
     </p>
-  </main>
+  </main> -->
+
+  <RouterView />
 </template>

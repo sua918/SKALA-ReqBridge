@@ -1,0 +1,9 @@
+{
+  /* @/ → frontend/src/ 경로 별칭 설정 */
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src/**/*"]
+}
