@@ -10,7 +10,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import com.sua.reqbridge.contract.ResourceNotFoundException;
 import com.sua.reqbridge.contract.StateConflictException;
 
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = {
+		"com.sua.reqbridge.analysis",
+		"com.sua.reqbridge.clarification",
+		"com.sua.reqbridge.revision"
+})
 public class ApiExceptionHandler {
 
 	@ExceptionHandler(IllegalArgumentException.class)

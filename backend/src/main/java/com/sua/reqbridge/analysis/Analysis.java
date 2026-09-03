@@ -60,9 +60,11 @@ public class Analysis {
 	@Column(name = "retry_of_analysis_id")
 	private Long retryOfAnalysisId;
 
+	@JdbcTypeCode(SqlTypes.JSON)
 	@Column(name = "input_snapshot", nullable = false, columnDefinition = "jsonb")
 	private String inputSnapshot;
 
+	@JdbcTypeCode(SqlTypes.JSON)
 	@Column(columnDefinition = "jsonb")
 	private String result;
 
@@ -119,6 +121,21 @@ public class Analysis {
 			long inputContentVersion, String inputSnapshot) {
 		return new Analysis(AnalysisKind.REVISION, documentId, requirementId,
 				null, inputContentVersion, inputSnapshot);
+	}
+
+	public static Analysis retry(Analysis failedAnalysis) {
+		if (failedAnalysis == null) {
+			throw new IllegalArgumentException("재시도할 대상 분석 작업이 필요합니다.");
+		}
+		if (failedAnalysis.getStatus() != AnalysisStatus.FAILED) {
+			throw new IllegalStateException("FAILED 작업만 재시도할 수 있습니다.");
+		}
+		Analysis retried = new Analysis(failedAnalysis.getKind(), failedAnalysis.getDocumentId(),
+				failedAnalysis.getRequirementId(), failedAnalysis.getClarificationId(),
+				failedAnalysis.getInputContentVersion(), failedAnalysis.getInputSnapshot(),
+				failedAnalysis.getAdapterType(), failedAnalysis.getSchemaVersion());
+		retried.retryOfAnalysisId = failedAnalysis.getId();
+		return retried;
 	}
 
 	public void start(Instant startedAt) {

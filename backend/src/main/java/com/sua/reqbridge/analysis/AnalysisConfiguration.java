@@ -60,4 +60,37 @@ public class AnalysisConfiguration {
 			AnswerWorkflowService service, DocumentAnalysisService failures) {
 		return new AnswerAnalysisWorker(service, failures);
 	}
+
+	@Bean
+	@ConditionalOnBean(CoreRequirementPort.class)
+	com.sua.reqbridge.revision.RevisionWorkflowService revisionWorkflowService(
+			AnalysisRepository analyses,
+			AmbiguityIssueRepository issues,
+			ClarificationRepository clarifications,
+			RequirementRevisionRepository revisions,
+			CoreRequirementPort core,
+			ApplicationEventPublisher events,
+			ObjectMapper json) {
+		return new com.sua.reqbridge.revision.RevisionWorkflowService(
+				analyses, issues, clarifications, revisions, core, events, json);
+	}
+
+	@Bean
+	@ConditionalOnBean(com.sua.reqbridge.revision.RevisionWorkflowService.class)
+	com.sua.reqbridge.revision.RevisionAnalysisWorker revisionAnalysisWorker(
+			com.sua.reqbridge.revision.RevisionWorkflowService service,
+			DocumentAnalysisService failures) {
+		return new com.sua.reqbridge.revision.RevisionAnalysisWorker(service, failures);
+	}
+
+	@Bean
+	@ConditionalOnBean(CoreRequirementPort.class)
+	com.sua.reqbridge.contract.WorkflowPreviewPort workflowPreviewPort(
+			CoreRequirementPort core,
+			AmbiguityIssueRepository issues,
+			ClarificationRepository clarifications,
+			RequirementRevisionRepository revisions) {
+		return new com.sua.reqbridge.clarification.WorkflowPreviewAdapter(
+				core, issues, clarifications, revisions);
+	}
 }

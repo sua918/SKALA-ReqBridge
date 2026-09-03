@@ -28,4 +28,6 @@ public interface AnalysisRepository extends JpaRepository<Analysis, Long> {
 
 	Optional<Analysis> findFirstByRequirementIdAndStatusInOrderByIdDesc(
 			long requirementId, Collection<AnalysisStatus> statuses);
+
+	Optional<Analysis> findFirstByRetryOfAnalysisIdOrderByIdDesc(long retryOfAnalysisId);
 }

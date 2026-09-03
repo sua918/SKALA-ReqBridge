@@ -191,6 +191,3 @@ public class AnswerWorkflowService {
 			List<Long> clarificationIds, List<Long> revisionIds, Assessment assessment) {
 	}
 }
-
-record AnswerAnalysisRequested(long analysisId) {
-}
