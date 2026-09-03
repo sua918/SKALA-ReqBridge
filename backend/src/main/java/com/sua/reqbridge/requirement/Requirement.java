@@ -21,21 +21,22 @@ import jakarta.persistence.Version;
 @Entity
 @Table(name = "requirement", schema = "app")
 public class Requirement {
+	private static final long MAX_CONTENT_VERSION = 9_007_199_254_740_991L;
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
 
-	@Column(name = "document_id", nullable = false)
+	@Column(name = "document_id", nullable = false, updatable = false)
 	private long documentId;
 
-	@Column(name = "analysis_id", nullable = false)
+	@Column(name = "analysis_id", nullable = false, updatable = false)
 	private long analysisId;
 
-	@Column(name = "sequence_no", nullable = false)
+	@Column(name = "sequence_no", nullable = false, updatable = false)
 	private int sequenceNo;
 
-	@Column(name = "original_text", nullable = false, columnDefinition = "text")
+	@Column(name = "original_text", nullable = false, updatable = false, columnDefinition = "text")
 	private String originalText;
 
 	@Enumerated(EnumType.STRING)
@@ -76,18 +77,20 @@ public class Requirement {
 	}
 
 	public long advanceContentVersion(long expectedContentVersion) {
+		verifyNotConfirmed();
 		verifyContentVersion(expectedContentVersion);
+		if (contentVersion >= MAX_CONTENT_VERSION) {
+			throw new RequirementStateException("Requirement content version limit reached");
+		}
 		contentVersion++;
 		return contentVersion;
 	}
 
 	public void changeStatus(long expectedContentVersion, RequirementStatus targetStatus) {
+		verifyNotConfirmed();
 		verifyContentVersion(expectedContentVersion);
 		if (targetStatus == null || targetStatus == RequirementStatus.CONFIRMED) {
 			throw new RequirementStateException("CONFIRMED requires an approved revision");
-		}
-		if (status == RequirementStatus.CONFIRMED) {
-			throw new RequirementStateException("A confirmed requirement cannot be reopened in MVP");
 		}
 		status = targetStatus;
 	}
@@ -97,6 +100,7 @@ public class Requirement {
 			long revisionId,
 			String approvedText,
 			Instant confirmationTime) {
+		verifyNotConfirmed();
 		verifyContentVersion(expectedContentVersion);
 		if (status != RequirementStatus.IN_REVIEW) {
 			throw new RequirementStateException("Only a requirement in review can be confirmed");
@@ -117,10 +121,21 @@ public class Requirement {
 	}
 
 	private void verifyContentVersion(long expectedContentVersion) {
+		if (expectedContentVersion < 1 || expectedContentVersion > MAX_CONTENT_VERSION) {
+			throw new IllegalArgumentException("Expected content version must be a positive JSON-safe integer");
+		}
 		if (contentVersion != expectedContentVersion) {
 			throw new RequirementStateException(
+					"CONTENT_VERSION_CONFLICT",
 					"Requirement content version mismatch: expected %d but was %d"
 							.formatted(expectedContentVersion, contentVersion));
+		}
+	}
+
+	private void verifyNotConfirmed() {
+		if (status == RequirementStatus.CONFIRMED) {
+			throw new RequirementStateException("REQUIREMENT_CONFIRMED",
+					"A confirmed requirement cannot be reopened or changed in MVP");
 		}
 	}
 

@@ -7,4 +7,8 @@ public class RequirementStateException extends StateConflictException {
 	public RequirementStateException(String message) {
 		super(message);
 	}
+
+	public RequirementStateException(String code, String message) {
+		super(code, message);
+	}
 }

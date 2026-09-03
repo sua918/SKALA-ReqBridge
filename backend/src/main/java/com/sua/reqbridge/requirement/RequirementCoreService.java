@@ -93,7 +93,8 @@ public class RequirementCoreService {
 		lock(requirementId).changeStatus(expectedContentVersion, targetStatus);
 	}
 
-	@Transactional
+	// The Workflow caller must approve the revision and copy the confirmed snapshot atomically.
+	@Transactional(propagation = Propagation.MANDATORY)
 	public void confirmRequirement(
 			long requirementId,
 			long expectedContentVersion,
