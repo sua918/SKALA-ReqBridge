@@ -1,11 +1,13 @@
 # ReqBridge Workflow Mock 시나리오
 
-- 기준 API 계약: 0.3.0
+- 기준 API 계약: 0.4.0
 - 적용 범위: P1 문서 분석, 답변 재판정, 수정안 재생성 Mock
 - 구현 담당: 신형섭
 - 목적: 실제 LLM 없이 상태·버전·저장·재시도 규칙을 반복 가능하게 검증한다.
 
 이 문서는 Mock의 고정 입력과 기대 출력을 정의한다. HTTP JSON 구조는 `ReqBridge_API_Specification.md`를 따르며, Mock이 DB ID·최종 승인·확정 상태를 결정하지 않는다. 지원하지 않는 입력을 임의 성공 처리하지 않고 명시적인 실패로 반환한다.
+
+TEXT와 FILE 모두 `Document.content`를 같은 Mock Workflow 입력으로 사용한다. FILE의 content는 PDF에서 추출한 텍스트이며 Mock Analyzer는 PDF binary를 직접 분석하지 않는다.
 
 ## 1. 공통 Fixture
 
