@@ -108,19 +108,39 @@ public class Analysis {
 	}
 
 	public static Analysis pendingDocument(long documentId, String inputSnapshot) {
-		return new Analysis(AnalysisKind.DOCUMENT, documentId, null, null, null, inputSnapshot);
+		return pendingDocument(documentId, inputSnapshot, AnalysisAdapterType.MOCK, "1.0.0");
+	}
+
+	public static Analysis pendingDocument(long documentId, String inputSnapshot,
+			AnalysisAdapterType adapterType, String schemaVersion) {
+		return new Analysis(AnalysisKind.DOCUMENT, documentId, null, null, null,
+				inputSnapshot, adapterType, schemaVersion);
 	}
 
 	public static Analysis pendingAnswer(long documentId, long requirementId,
 			long clarificationId, long inputContentVersion, String inputSnapshot) {
+		return pendingAnswer(documentId, requirementId, clarificationId, inputContentVersion,
+				inputSnapshot, AnalysisAdapterType.MOCK, "1.0.0");
+	}
+
+	public static Analysis pendingAnswer(long documentId, long requirementId,
+			long clarificationId, long inputContentVersion, String inputSnapshot,
+			AnalysisAdapterType adapterType, String schemaVersion) {
 		return new Analysis(AnalysisKind.ANSWER, documentId, requirementId,
-				clarificationId, inputContentVersion, inputSnapshot);
+				clarificationId, inputContentVersion, inputSnapshot, adapterType, schemaVersion);
 	}
 
 	public static Analysis pendingRevision(long documentId, long requirementId,
 			long inputContentVersion, String inputSnapshot) {
+		return pendingRevision(documentId, requirementId, inputContentVersion,
+				inputSnapshot, AnalysisAdapterType.MOCK, "1.0.0");
+	}
+
+	public static Analysis pendingRevision(long documentId, long requirementId,
+			long inputContentVersion, String inputSnapshot,
+			AnalysisAdapterType adapterType, String schemaVersion) {
 		return new Analysis(AnalysisKind.REVISION, documentId, requirementId,
-				null, inputContentVersion, inputSnapshot);
+				null, inputContentVersion, inputSnapshot, adapterType, schemaVersion);
 	}
 
 	public static Analysis retry(Analysis failedAnalysis) {

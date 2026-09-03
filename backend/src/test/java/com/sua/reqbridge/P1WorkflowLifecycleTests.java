@@ -86,7 +86,7 @@ class P1WorkflowLifecycleTests {
 		answerService = new AnswerWorkflowService(
 				analyses, issues, clarifications, revisions, core, events, analyzer, json);
 		revisionService = new RevisionWorkflowService(
-				analyses, issues, clarifications, revisions, core, events, json);
+				analyses, issues, clarifications, revisions, core, events, analyzer, json);
 
 		com.sua.reqbridge.contract.WorkflowPreviewPort previewPort = new com.sua.reqbridge.clarification.WorkflowPreviewAdapter(
 				core, issues, clarifications, revisions);

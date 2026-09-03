@@ -42,7 +42,7 @@ class AnalysisRetryTests {
 	private ClarificationRepository clarifications;
 	private CoreRequirementPort core;
 	private ApplicationEventPublisher events;
-	private MockWorkflowAnalyzer analyzer;
+	private com.sua.reqbridge.contract.ai.WorkflowAnalyzer analyzer;
 	private ObjectMapper json;
 	private DocumentAnalysisService service;
 
@@ -53,7 +53,7 @@ class AnalysisRetryTests {
 		clarifications = mock(ClarificationRepository.class);
 		core = mock(CoreRequirementPort.class);
 		events = mock(ApplicationEventPublisher.class);
-		analyzer = mock(MockWorkflowAnalyzer.class);
+		analyzer = mock(com.sua.reqbridge.contract.ai.WorkflowAnalyzer.class);
 		json = new ObjectMapper();
 		service = new DocumentAnalysisService(analyses, issues, clarifications, core, events, analyzer, json);
 	}
@@ -210,5 +210,19 @@ class AnalysisRetryTests {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.id").value(306))
 				.andExpect(jsonPath("$.data.status").value("COMPLETED"));
+	}
+
+	@Test
+	void retryPreservesAdapterTypeAndSchemaVersion() {
+		Analysis failed = Analysis.pendingDocument(101, "{}", com.sua.reqbridge.contract.AnalysisAdapterType.LLM, "2.1.0");
+		ReflectionTestUtils.setField(failed, "id", 301L);
+		failed.start(Instant.now());
+		failed.fail("AI_OUTPUT_INVALID", "fail", Instant.now());
+
+		Analysis retried = Analysis.retry(failed);
+
+		assertThat(retried.getAdapterType()).isEqualTo(com.sua.reqbridge.contract.AnalysisAdapterType.LLM);
+		assertThat(retried.getSchemaVersion()).isEqualTo("2.1.0");
+		assertThat(retried.getRetryOfAnalysisId()).isEqualTo(301L);
 	}
 }
