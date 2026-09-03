@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[제안요청서] 블록체인 기반 바이오 원재료 이력관리 및 상품 조회 플랫폼 구축</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&display=swap');
+
+    :root {
+      --primary-color: #1a365d;
+      --secondary-color: #2b6cb0;
+      --accent-color: #2b6cb0;
+      --table-header-bg: #f0f4f8;
+      --table-sub-header-bg: #f7fafc;
+      --border-color: #cbd5e1;
+      --border-dark: #64748b;
+      --text-main: #1e293b;
+      --text-muted: #64748b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Noto Sans KR', 'Malgun Gothic', '맑은 고딕', sans-serif;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-main);
+      background-color: #e2e8f0;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* 화면용 툴바 */
+    .screen-toolbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: #0f172a;
+      color: #ffffff;
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+      z-index: 1000;
+    }
+
+    .screen-toolbar .info {
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .screen-toolbar .info strong {
+      color: #38bdf8;
+    }
+
+    .screen-toolbar .btn-print {
+      background: #2563eb;
+      color: #ffffff;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s;
+    }
+
+    .screen-toolbar .btn-print:hover {
+      background: #1d4ed8;
+    }
+
+    /* 문서 전체 컨테이너 */
+    .document-container {
+      width: 210mm;
+      margin: 70px auto 40px auto;
+      background: #ffffff;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    }
+
+    /* A4 페이지 단위 */
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      padding: 18mm 18mm 18mm 18mm;
+      position: relative;
+      background: #ffffff;
+      page-break-after: always;
+      break-after: page;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .page-footer {
+      position: absolute;
+      bottom: 10mm;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* 표지 스타일 */
+    .cover-page {
+      justify-content: space-between;
+      border: 2px solid #334155;
+      margin: 0;
+      padding: 25mm 22mm 20mm 22mm;
+      position: relative;
+    }
+
+    .cover-page::before {
+      content: "";
+      position: absolute;
+      top: 5mm;
+      left: 5mm;
+      right: 5mm;
+      bottom: 5mm;
+      border: 1px solid #94a3b8;
+      pointer-events: none;
+    }
+
+    .cover-badge {
+      display: inline-block;
+      border: 1.5px solid var(--primary-color);
+      color: var(--primary-color);
+      padding: 4px 14px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      margin-bottom: 30mm;
+    }
+
+    .cover-title-area {
+      text-align: center;
+      margin-bottom: 25mm;
+    }
+
+    .cover-sub {
+      font-size: 20px;
+      letter-spacing: 8px;
+      font-weight: 600;
+      color: var(--border-dark);
+      margin-bottom: 12px;
+    }
+
+    .cover-main-title {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--primary-color);
+      line-height: 1.4;
+      margin-bottom: 10px;
+      word-break: keep-all;
+    }
+
+    .cover-sub-title {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .cover-meta {
+      margin-top: auto;
+      margin-bottom: 15mm;
+    }
+
+    .cover-meta-date {
+      text-align: center;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--primary-color);
+      letter-spacing: 3px;
+      margin-bottom: 15mm;
+    }
+
+    .cover-org-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1.5px solid #334155;
+    }
+
+    .cover-org-table th, .cover-org-table td {
+      border: 1px solid #cbd5e1;
+      padding: 7px 12px;
+      font-size: 12px;
+    }
+
+    .cover-org-table th {
+      background: #f1f5f9;
+      color: var(--primary-color);
+      font-weight: 700;
+      width: 25%;
+      text-align: center;
+    }
+
+    /* 목차 및 본문 헤더 */
+    .section-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--primary-color);
+      border-bottom: 2px solid var(--primary-color);
+      padding-bottom: 5px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sub-title {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: #1e3a8a;
+      margin: 14px 0 7px 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .sub-title::before {
+      content: "■";
+      color: var(--secondary-color);
+      font-size: 11px;
+    }
+
+    .sub-sub-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #334155;
+      margin: 10px 0 5px 0;
+    }
+
+    p, li {
+      color: #334155;
+      text-align: justify;
+      word-break: keep-all;
+    }
+
+    ul {
+      margin-left: 18px;
+      margin-bottom: 8px;
+    }
+
+    li {
+      margin-bottom: 3px;
+    }
+
+    /* 공통 표 서식 (RFP 표준) */
+    .rfp-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0 14px 0;
+      border: 1.5px solid #475569;
+      font-size: 12px;
+    }
+
+    .rfp-table th, .rfp-table td {
+      border: 1px solid #cbd5e1;
+      padding: 5px 9px;
+      vertical-align: middle;
+    }
+
+    .rfp-table th {
+      background-color: var(--table-header-bg);
+      color: #0f172a;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    /* 요구사항 명세서 전용 상세 테이블 (4단 서식) */
+    .req-detail-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 12px;
+      border: 1.5px solid #1e3a8a;
+      font-size: 11.5px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .req-detail-table th, .req-detail-table td {
+      border: 1px solid #cbd5e1;
+      padding: 5px 8px;
+    }
+
+    .req-detail-table .col-header {
+      background: #e2e8f0;
+      color: #0f172a;
+      font-weight: 700;
+      width: 18%;
+      text-align: center;
+    }
+
+    .req-detail-table .col-value {
+      width: 32%;
+    }
+
+    .req-detail-table .sub-header {
+      background: #f1f5f9;
+      color: #334155;
+      font-weight: 600;
+      text-align: left;
+    }
+
+    .req-detail-table .content-box {
+      padding: 6px 10px;
+      line-height: 1.55;
+    }
+
+    .callout-box {
+      background: #f8fafc;
+      border-left: 4px solid var(--secondary-color);
+      padding: 9px 12px;
+      margin: 10px 0 12px 0;
+      font-size: 12px;
+      color: #334155;
+    }
+
+    /* 인쇄 모드 최적화 */
+    @media print {
+      body {
+        background-color: #ffffff;
+      }
+
+      .screen-toolbar {
+        display: none !important;
+      }
+
+      .document-container {
+        width: 100%;
+        margin: 0;
+        box-shadow: none;
+      }
+
+      .page {
+        width: 100%;
+        min-height: auto;
+        padding: 12mm 15mm 15mm 15mm;
+        margin: 0;
+        page-break-after: always;
+        break-after: page;
+      }
+
+      @page {
+        size: A4 portrait;
+        margin: 0;
+      }
+
+      .cover-page {
+        padding: 22mm 18mm 18mm 18mm;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 화면 상단 전용 인쇄 안내 툴바 -->
+  <div class="screen-toolbar">
+    <div class="info">
+      <strong>제안요청서(RFP) 시연용 요구사항 문서</strong> | 
+      브라우저 인쇄 설정: [대상: PDF로 저장] / [용지: A4] / [배경 그래픽: 체크]
+    </div>
+    <button class="btn-print" onclick="window.print()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="6 9 6 2 18 2 18 9"></polyline>
+        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+        <rect x="6" y="14" width="12" height="8"></rect>
+      </svg>
+      PDF로 인쇄 / 저장
+    </button>
+  </div>
+
+  <div class="document-container">
+
+    <!-- PAGE 1: 표지 -->
+    <div class="page cover-page">
+      <div>
+        <span class="cover-badge">시범사업 제안요청서</span>
+      </div>
+
+      <div class="cover-title-area">
+        <div class="cover-sub">제 안 요 청 서</div>
+        <div class="cover-main-title">
+          블록체인 기반 바이오 원재료 이력관리 및<br>
+          상품 조회 플랫폼 구축
+        </div>
+        <div class="cover-sub-title">Bio Materials Traceability & Product Inquiry Platform</div>
+      </div>
+
+      <div class="cover-meta">
+        <div class="cover-meta-date">2026. 09.</div>
+        <table class="cover-org-table">
+          <tr>
+            <th>발주 기관</th>
+            <td colspan="3">충청북도 바이오산업국</td>
+          </tr>
+          <tr>
+            <th>사업 책임자</th>
+            <td>신성장동력과 서기관 홍길동</td>
+            <th>연 락 처</th>
+            <td>043-220-8410</td>
+          </tr>
+          <tr>
+            <th>사업 담당자</th>
+            <td>신성장동력과 주무관 이영희</td>
+            <th>연 락 처</th>
+            <td>043-220-8432</td>
+          </tr>
+          <tr>
+            <th>소관 부서</th>
+            <td colspan="3">충청북도 신성장동력과 바이오융합팀</td>
+          </tr>
+        </table>
+      </div>
+
+      <div class="page-footer">- 1 -</div>
+    </div>
+
+    <!-- PAGE 2: 목차 -->
+    <div class="page">
+      <div class="section-title">목 차</div>
+
+      <table class="rfp-table" style="margin-top: 15px; font-size: 12.5px;">
+        <thead>
+          <tr>
+            <th style="width: 75%;">장 및 절</th>
+            <th style="width: 25%;">페이지</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Ⅰ. 사업 개요</strong></td>
+            <td style="text-align: center;"><strong>3</strong></td>
+          </tr>
+          <tr>
+            <td style="padding-left: 20px;">1. 추진 배경 및 필요성</td>
+            <td style="text-align: center;">3</td>
+          </tr>
+          <tr>
+            <td style="padding-left: 20px;">2. 서비스 내용 및 사업 범위</td>
+            <td style="text-align: center;">3</td>
+          </tr>
+          <tr>
+            <td style="padding-left: 20px;">3. 기대 효과</td>
+            <td style="text-align: center;">4</td>
+          </tr>
+          <tr>
+            <td><strong>Ⅱ. 사업 추진 방안</strong></td>
+            <td style="text-align: center;"><strong>4</strong></td>
+          </tr>
+          <tr>
+            <td style="padding-left: 20px;">1. 추진 체계</td>
+            <td style="text-align: center;">4</td>
+          </tr>
+          <tr>
+            <td style="padding-left: 20px;">2. 추진 일정</td>
+            <td style="text-align: center;">4</td>
+          </tr>
+          <tr>
+            <td><strong>Ⅲ. 제안요청 내용</strong></td>
+            <td style="text-align: center;"><strong>5</strong></td>
+          </tr>
+          <tr>
+            <td style="padding-left: 20px;">1. 제안요청 개요</td>
+            <td style="text-align: center;">5</td>
+          </tr>
+          <tr>
+            <td style="padding-left: 20px;">2. 목표 시스템 개념도</td>
+            <td style="text-align: center;">5</td>
+          </tr>
+          <tr>
+            <td style="padding-left: 20px;">3. 요구사항 총괄 목록</td>
+            <td style="text-align: center;">5</td>
+          </tr>
+          <tr>
+            <td><strong>Ⅳ. 상세 요구사항 정의서</strong></td>
+            <td style="text-align: center;"><strong>6</strong></td>
+          </tr>
+          <tr>
+            <td style="padding-left: 20px;">1. 기능 요구사항 (SFR : System Function Requirement)</td>
+            <td style="text-align: center;">6</td>
+          </tr>
+          <tr>
+            <td style="padding-left: 20px;">2. 성능 요구사항 (PER : Performance Requirement)</td>
+            <td style="text-align: center;">7</td>
+          </tr>
+          <tr>
+            <td style="padding-left: 20px;">3. 인터페이스 요구사항 (INR : Interface Requirement)</td>
+            <td style="text-align: center;">8</td>
+          </tr>
+          <tr>
+            <td style="padding-left: 20px;">4. 데이터 및 보안 요구사항 (DAR, SEC)</td>
+            <td style="text-align: center;">8</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout-box" style="margin-top: 25px;">
+        <strong>[안내 사항]</strong><br>
+        본 제안요청서는 충청북도 바이오 원재료 생산·가공·유통 및 최종 소비자를 위한 상품 조회 플랫폼의 핵심 요구사항을 기술하고 있으며, 계약 체결 후 분석·설계 단계의 공식 과업 범위 기준이 됩니다.
+      </div>
+
+      <div class="page-footer">- 2 -</div>
+    </div>
+
+    <!-- PAGE 3: 사업 개요 -->
+    <div class="page">
+      <div class="section-title">Ⅰ. 사업 개요</div>
+
+      <div class="sub-title">1. 추진 배경 및 필요성</div>
+      <p>
+        □ 국내 바이오 건강식품 시장은 고부가가치 산업으로 지속 성장하고 있으나, 원재료 원산지 위변조 및 허위 표시 라벨링 유통 사례가 빈번하게 발생하여 소비자 신뢰 저하 및 선의의 생산 농가 피해가 발생하고 있음.
+      </p>
+      <ul>
+        <li>식품의약품안전처 조사 결과 건강기능식품 제조 감시 중 원재료 성분규격 및 표시기준 위반 건수가 다수 적발되어 원재료 출처 및 가공 단계의 투명한 이력관리 체계가 시급히 요구됨.</li>
+        <li>홍삼·인삼 등 대표 바이오 특산물의 원물 수확부터 가공, 유통, 완제품 판매에 이르기까지 위·변조가 불가능한 블록체인 분산원장 기반의 실시간 추적 체계 구축이 필수적임.</li>
+      </ul>
+
+      <p>
+        □ 최종 소비자 및 바이어의 신뢰 확보를 위한 원스톱 상품 조회 서비스의 필요성 증대
+      </p>
+      <ul>
+        <li>소비자가 제품 패키지의 QR코드를 스캔하여 원재료 시험성적서, 유통 경로, 인증 정보를 즉시 조회할 수 있는 대국민 포털 서비스 제공 필요.</li>
+        <li>지역 특산품 판촉 행사 및 온라인 기획전 등 대규모 접속 폭증 시에도 중단 없이 조회 서비스를 제공할 수 있는 신뢰성 높은 아키텍처 수립이 요구됨.</li>
+      </ul>
+
+      <div class="sub-title">2. 서비스 내용 및 사업 범위</div>
+      <div class="sub-sub-title">가. 바이오 원재료 생산·유통 전과정 블록체인 이력 관리</div>
+      <ul>
+        <li>원물업체, 가공업체, 유통업체, 제조업체 등 공급망 참여자 간 데이터 상호 검증 및 원장 기록.</li>
+        <li>공인시험기관의 진세노사이드 함량, 잔류농약 검사 등 품질성적서의 스마트 컨트랙트 등록.</li>
+      </ul>
+
+      <div class="sub-sub-title">나. 대국민 상품 조회 포털 및 보안 QR 서비스 구축</div>
+      <ul>
+        <li>대국민 상품 조회 포털 WEB/WAS 서비스 개발 및 모바일 최적화 반응형 웹 구현.</li>
+        <li>식별코드(보안 QR) 발급, 스캔 검증 및 조회 트랜잭션 처리.</li>
+      </ul>
+
+      <div class="page-footer">- 3 -</div>
+    </div>
+
+    <!-- PAGE 4: 기대효과 및 추진방안 -->
+    <div class="page">
+      <div class="sub-title">3. 기대 효과</div>
+      <table class="rfp-table">
+        <thead>
+          <tr>
+            <th style="width: 25%;">구분</th>
+            <th style="width: 75%;">기대 효과 및 파급 효과</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="text-align: center; font-weight: 600;">투명성 제고</td>
+            <td>블록체인 분산원장을 통한 위변조 원천 차단으로 충북 바이오 브랜드 신뢰도 제고</td>
+          </tr>
+          <tr>
+            <td style="text-align: center; font-weight: 600;">신속한 대응</td>
+            <td>품질 문제 또는 회수 사유 발생 시 유통 경로 역추적 시간을 기존 수일에서 수 초 이내로 단축</td>
+          </tr>
+          <tr>
+            <td style="text-align: center; font-weight: 600;">대국민 서비스</td>
+            <td>소비자 상품 조회 편의성 극대화 및 지역 농가 보호를 위한 안전 먹거리 유통 환경 조성</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="section-title" style="margin-top: 20px;">Ⅱ. 사업 추진 방안</div>
+
+      <div class="sub-title">1. 추진 체계</div>
+      <table class="rfp-table">
+        <thead>
+          <tr>
+            <th style="width: 30%;">기관 및 부서</th>
+            <th style="width: 70%;">주요 역할 및 업무 내용</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="text-align: center; font-weight: 600;">충청북도 신성장동력과</td>
+            <td>사업 총괄 기획, 예산 관리, 정책 협의체 운영 및 사업 검수</td>
+          </tr>
+          <tr>
+            <td style="text-align: center; font-weight: 600;">충북과학기술혁신원</td>
+            <td>기술 검토 지원, 노드 운영 참여 및 품질 관리 자문</td>
+          </tr>
+          <tr>
+            <td style="text-align: center; font-weight: 600;">주관 사업자 (개발사)</td>
+            <td>시스템 분석·설계, 블록체인 및 상품 조회 웹 개발, 인프라 구축, 시험 및 이관</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="sub-title">2. 추진 일정</div>
+      <table class="rfp-table">
+        <thead>
+          <tr>
+            <th style="width: 25%;">단계</th>
+            <th style="width: 45%;">주요 과업</th>
+            <th style="width: 30%;">수행 일정</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="text-align: center;">착수 및 요건 정의</td>
+            <td>요구사항 상세 분석, 사용자 인터뷰, 과업 명세화</td>
+            <td style="text-align: center;">착수 후 1개월</td>
+          </tr>
+          <tr>
+            <td style="text-align: center;">설계 및 개발</td>
+            <td>아키텍처 설계, 블록체인/Web 개발, 연계 개발</td>
+            <td style="text-align: center;">착수 후 2~4개월</td>
+          </tr>
+          <tr>
+            <td style="text-align: center;">시험 및 검증</td>
+            <td>단위/통합 테스트, 부하 및 성능 시험, 보안 취약점 점검</td>
+            <td style="text-align: center;">착수 후 5개월</td>
+          </tr>
+          <tr>
+            <td style="text-align: center;">시범 운영 및 이관</td>
+            <td>사용자 교육, 시스템 안정화, 최종 검수</td>
+            <td style="text-align: center;">착수 후 6개월</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="page-footer">- 4 -</div>
+    </div>
+
+    <!-- PAGE 5: 제안요청 내용 및 총괄표 -->
+    <div class="page">
+      <div class="section-title">Ⅲ. 제안요청 내용</div>
+
+      <div class="sub-title">1. 제안요청 개요</div>
+      <ul>
+        <li><strong>사 업 명 :</strong> 블록체인 기반 바이오 원재료 이력관리 및 상품 조회 플랫폼 구축</li>
+        <li><strong>사업 기간 :</strong> 계약 체결일로부터 6개월간</li>
+        <li><strong>추진 방식 :</strong> 제한경쟁입찰 (협상에 의한 계약)</li>
+        <li><strong>주요 과업 :</strong> 원재료 이력관리 분산 노드 구축, 데이터 통합관리 시스템, 대국민 상품 조회 포털, 대용량 트래픽 대응 아키텍처 구현</li>
+      </ul>
+
+      <div class="sub-title">2. 목표 시스템 개념도</div>
+      <div style="border: 1px solid #94a3b8; padding: 10px; background: #f8fafc; margin: 8px 0 12px 0; font-size: 11.5px;">
+        <div style="text-align: center; font-weight: 700; color: #1e3a8a; margin-bottom: 6px;">
+          [ 블록체인 기반 이력관리 및 상품 조회 아키텍처 개념도 ]
+        </div>
+        <table class="rfp-table" style="background: #ffffff; margin-bottom: 0;">
+          <tr>
+            <th style="width: 25%;">사용자 계층</th>
+            <td>소비자 (모바일/웹 조회), 참여기업 (원재료/가공/유통 입력), 충북도 운영 관리자</td>
+          </tr>
+          <tr>
+            <th style="width: 25%;">서비스 계층</th>
+            <td>대국민 상품 조회 포털, 보안 QR 발급·검증 모듈, 이력 추적 대시보드, 통계 모듈</td>
+          </tr>
+          <tr>
+            <th style="width: 25%;">플랫폼 계층</th>
+            <td>기업용 프라이빗 블록체인 코어, 스마트 컨트랙트 엔진, 오프체인 고속 캐시 계층</td>
+          </tr>
+          <tr>
+            <th style="width: 25%;">인프라 계층</th>
+            <td>G-클라우드 기반 가상 서버(WEB, WAS, DB), 분산 노드 인프라, L4 로드밸런서</td>
+          </tr>
+        </table>
+      </div>
+
+      <div class="sub-title">3. 요구사항 총괄 목록</div>
+      <table class="rfp-table">
+        <thead>
+          <tr>
+            <th style="width: 25%;">요구사항 구분</th>
+            <th style="width: 15%;">건수</th>
+            <th style="width: 60%;">주요 요구사항 명칭</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="text-align: center; font-weight: 600;">기능 요구사항 (SFR)</td>
+            <td style="text-align: center;">3건</td>
+            <td>원재료 이력 데이터 수집, 이력 데이터 수정 관리, 대국민 상품 조회 포털</td>
+          </tr>
+          <tr>
+            <td style="text-align: center; font-weight: 600; color: #1e40af;">성능 요구사항 (PER)</td>
+            <td style="text-align: center; font-weight: 600; color: #1e40af;">3건</td>
+            <td>시스템 응답 성능 일반, <strong>대용량 상품 조회 성능 보장</strong>, 서비스 가용성 보장</td>
+          </tr>
+          <tr>
+            <td style="text-align: center; font-weight: 600;">인터페이스 요구사항 (INR)</td>
+            <td style="text-align: center;">1건</td>
+            <td>외부 유통망 및 시험기관 연계 API 제공</td>
+          </tr>
+          <tr>
+            <td style="text-align: center; font-weight: 600;">데이터 요구사항 (DAR)</td>
+            <td style="text-align: center;">1건</td>
+            <td>공공 데이터 표준 관리 및 원장 데이터 구조화</td>
+          </tr>
+          <tr>
+            <td style="text-align: center; font-weight: 600;">보안 요구사항 (SEC)</td>
+            <td style="text-align: center;">1건</td>
+            <td>플랫폼 정보보호 체계 및 이력 데이터 보안</td>
+          </tr>
+          <tr style="background: #f1f5f9; font-weight: 700;">
+            <td style="text-align: center;">합 계</td>
+            <td style="text-align: center;">9건</td>
+            <td>플랫폼 구축 핵심 요구사항 명세화</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="page-footer">- 5 -</div>
+    </div>
+
+    <!-- PAGE 6: 상세요구사항 - 기능요구사항 (SFR) -->
+    <div class="page">
+      <div class="section-title">Ⅳ. 상세 요구사항 정의서</div>
+      <div class="sub-title">1. 기능 요구사항 (SFR : System Function Requirement)</div>
+
+      <!-- SFR-001: CONDITION_MISSING 반영 -->
+      <table class="req-detail-table">
+        <tr>
+          <th class="col-header">요구사항 분류</th>
+          <td class="col-value">기능 요구사항</td>
+          <th class="col-header">요구사항 번호</th>
+          <td class="col-value"><strong>SFR-001</strong></td>
+        </tr>
+        <tr>
+          <th class="col-header">요구사항 명칭</th>
+          <td colspan="3"><strong>원재료 이력 데이터 수집 및 블록체인 등록</strong></td>
+        </tr>
+        <tr>
+          <th class="col-header" rowspan="2">상세 설명</th>
+          <td colspan="3" class="sub-header"><strong>[정의]</strong> 참여기업별 원재료 생산·가공·유통 이력 정보 등록 및 분산원장 연계</td>
+        </tr>
+        <tr>
+          <td colspan="3" class="content-box">
+            <strong>[세부내용]</strong><br>
+            o 충청북도 내 바이오·인삼·홍삼 참여 기업의 생산 일자, 원산지, 가공 공정 정보를 입력받아 블록체인에 영구 기록하여야 함.<br>
+            o 온체인(On-Chain) 분산원장과 오프체인(Off-Chain) 관계형 데이터베이스 간 데이터 동기화 체계를 구성하여야 함.<br>
+            o 원재료 검사 정보 또는 유통 단계별 이력에 변동이 발생한 경우 필요한 경우 관리자에게 알림을 제공하고 시스템에 반영하여야 함.
+          </td>
+        </tr>
+        <tr>
+          <th class="col-header">요구 산출물</th>
+          <td colspan="3">기능 명세서, 데이터베이스 설계서</td>
+        </tr>
+      </table>
+
+      <!-- SFR-002: ACTOR_MISSING 반영 -->
+      <table class="req-detail-table">
+        <tr>
+          <th class="col-header">요구사항 분류</th>
+          <td class="col-value">기능 요구사항</td>
+          <th class="col-header">요구사항 번호</th>
+          <td class="col-value"><strong>SFR-002</strong></td>
+        </tr>
+        <tr>
+          <th class="col-header">요구사항 명칭</th>
+          <td colspan="3"><strong>시험성적서 및 이력 데이터 수정 관리</strong></td>
+        </tr>
+        <tr>
+          <th class="col-header" rowspan="2">상세 설명</th>
+          <td colspan="3" class="sub-header"><strong>[정의]</strong> 오기재된 이력 정보 및 성적서 재발급 시 데이터 보정 및 이력 추적</td>
+        </tr>
+        <tr>
+          <td colspan="3" class="content-box">
+            <strong>[세부내용]</strong><br>
+            o 공인시험기관의 성적서 재발급 등 정정 사유가 발생한 경우, 승인 절차를 거친 후 데이터를 수정할 수 있어야 함.<br>
+            o 데이터 수정 시 기존 원본 이력과 정정 사유, 변경 일시를 감사 로그(Audit Log) 형태로 별도 보관하여 위변조를 방지하여야 함.<br>
+            o 분산원장에 이미 등록된 트랜잭션의 경우, 덮어쓰기가 아닌 보정 트랜잭션 추가 발행 방식으로 무결성을 유지하여야 함.
+          </td>
+        </tr>
+        <tr>
+          <th class="col-header">요구 산출물</th>
+          <td colspan="3">프로그램 사양서, 감사로그 명세서</td>
+        </tr>
+      </table>
+
+      <!-- SFR-003: SUCCESS_CRITERIA_MISSING 반영 -->
+      <table class="req-detail-table">
+        <tr>
+          <th class="col-header">요구사항 분류</th>
+          <td class="col-value">기능 요구사항</td>
+          <th class="col-header">요구사항 번호</th>
+          <td class="col-value"><strong>SFR-003</strong></td>
+        </tr>
+        <tr>
+          <th class="col-header">요구사항 명칭</th>
+          <td colspan="3"><strong>대국민 바이오 상품 이력 조회 포털</strong></td>
+        </tr>
+        <tr>
+          <th class="col-header" rowspan="2">상세 설명</th>
+          <td colspan="3" class="sub-header"><strong>[정의]</strong> 최종 소비자를 위한 제품 이력 및 품질 정보 대국민 공개 서비스</td>
+        </tr>
+        <tr>
+          <td colspan="3" class="content-box">
+            <strong>[세부내용]</strong><br>
+            o 소비자가 모바일 기기로 패키지 QR코드를 스캔하여 제품의 생산지, 가공일자, 시험성적서를 원클릭으로 확인할 수 있어야 함.<br>
+            o 소비자가 모바일 QR코드를 스캔하여 조회할 때, 온·오프체인 데이터 정합성 검증을 거쳐 오류 없이 정상적으로 처리되어야 함.<br>
+            o 웹 표준을 준수하여 다양한 모바일 브라우저(iOS Safari, Android Chrome 등)에서 동일한 화면을 제공하여야 함.
+          </td>
+        </tr>
+        <tr>
+          <th class="col-header">요구 산출물</th>
+          <td colspan="3">화면 설계서(UI/UX), 프로그램 소스코드</td>
+        </tr>
+      </table>
+
+      <div class="page-footer">- 6 -</div>
+    </div>
+
+    <!-- PAGE 7: 상세요구사항 - 성능요구사항 (PER) -->
+    <div class="page">
+      <div class="sub-title">2. 성능 요구사항 (PER : Performance Requirement)</div>
+
+      <!-- PER-001: 일반 성능 기준 -->
+      <table class="req-detail-table">
+        <tr>
+          <th class="col-header">요구사항 분류</th>
+          <td class="col-value">성능 요구사항</td>
+          <th class="col-header">요구사항 번호</th>
+          <td class="col-value"><strong>PER-001</strong></td>
+        </tr>
+        <tr>
+          <th class="col-header">요구사항 명칭</th>
+          <td colspan="3"><strong>시스템 응답 성능 일반</strong></td>
+        </tr>
+        <tr>
+          <th class="col-header" rowspan="2">상세 설명</th>
+          <td colspan="3" class="sub-header"><strong>[정의]</strong> 웹/WAS 시스템의 안정적이고 신속한 기본 트랜잭션 응답 성능 보장</td>
+        </tr>
+        <tr>
+          <td colspan="3" class="content-box">
+            <strong>[세부내용]</strong><br>
+            o 사업대상 시스템의 성능을 고려한 애플리케이션 최적화 방안을 제시하여야 함.<br>
+            o 대상 시스템에 대하여 24시간 365일 안정적 운영 지원 및 성능 모니터링 체계를 수립하여야 함.<br>
+            o 시스템 구축 중 APM 도구를 적용하여 병목 구간을 사전 분석 및 조치한 후 시스템을 오픈하여야 함.
+          </td>
+        </tr>
+        <tr>
+          <th class="col-header">요구 산출물</th>
+          <td colspan="3">성능 시험 결과서, 모니터링 구성 방안서</td>
+        </tr>
+      </table>
+
+      <!-- PER-002: QUANTITY_MISSING / PERFORMANCE_MISSING 반영 (Mock 엔진 연동 핵심 항목) -->
+      <table class="req-detail-table" style="border: 2px solid #2563eb;">
+        <tr>
+          <th class="col-header" style="background: #dbeafe; color: #1e40af;">요구사항 분류</th>
+          <td class="col-value">성능 요구사항</td>
+          <th class="col-header" style="background: #dbeafe; color: #1e40af;">요구사항 번호</th>
+          <td class="col-value"><strong>PER-002</strong></td>
+        </tr>
+        <tr>
+          <th class="col-header" style="background: #dbeafe; color: #1e40af;">요구사항 명칭</th>
+          <td colspan="3"><strong>대용량 상품 조회 성능 보장</strong></td>
+        </tr>
+        <tr>
+          <th class="col-header" rowspan="2" style="background: #dbeafe; color: #1e40af;">상세 설명</th>
+          <td colspan="3" class="sub-header"><strong>[정의]</strong> 마케팅 프로모션 및 접속 폭증 상황에서의 대용량 상품 조회 부하 대응</td>
+        </tr>
+        <tr>
+          <td colspan="3" class="content-box">
+            <strong>[세부내용]</strong><br>
+            <p style="margin: 4px 0; word-break: keep-all; font-size: 11.5px; line-height: 1.55;">
+              o 시스템은 많은 사용자의 동시 상품 조회 요청에 빠르게 응답해야 한다. 부하 시험은 10분 동안 수행하며 성공 응답 비율은 99.9% 이상이어야 한다.
+            </p>
+            o 대용량 데이터의 조회, 검색, 추출 등 서비스 이용에 병목이 발생하지 않도록 캐시 계층(Redis 등)을 적극 활용하여야 함.<br>
+            o 트래픽 급증 시 시스템 장애 방지를 위한 부하 분산 및 서킷 브레이커 방안을 마련하여야 함.
+          </td>
+        </tr>
+        <tr>
+          <th class="col-header" style="background: #dbeafe; color: #1e40af;">요구 산출물</th>
+          <td colspan="3">부하 시험 결과서, 성능 튜닝 보고서</td>
+        </tr>
+      </table>
+
+      <!-- PER-003: 가용성 보장 -->
+      <table class="req-detail-table">
+        <tr>
+          <th class="col-header">요구사항 분류</th>
+          <td class="col-value">성능 요구사항</td>
+          <th class="col-header">요구사항 번호</th>
+          <td class="col-value"><strong>PER-003</strong></td>
+        </tr>
+        <tr>
+          <th class="col-header">요구사항 명칭</th>
+          <td colspan="3"><strong>서비스 가용성 및 무중단 운영 보장</strong></td>
+        </tr>
+        <tr>
+          <th class="col-header" rowspan="2">상세 설명</th>
+          <td colspan="3" class="sub-header"><strong>[정의]</strong> 서비스 무중단 운영 및 고가용성(HA) 인프라 구축</td>
+        </tr>
+        <tr>
+          <td colspan="3" class="content-box">
+            <strong>[세부내용]</strong><br>
+            o 특정 웹/WAS 또는 노드 장애 발생 시에도 자동 페일오버를 통해 서비스가 중단 없이 지속되도록 이중화 구성하여야 함.<br>
+            o 클라우드 인프라 장애에 대비하여 정기 데이터 백업 체계를 수립하고 연간 가용성 99.9% 이상을 목표로 관리하여야 함.<br>
+            o 정기 점검 및 애플리케이션 배포 시 무중단 롤링 업데이트 방식을 적용하여야 함.
+          </td>
+        </tr>
+        <tr>
+          <th class="col-header">요구 산출물</th>
+          <td colspan="3">인프라 구성도, 가용성 보장 계획서</td>
+        </tr>
+      </table>
+
+      <div class="page-footer">- 7 -</div>
+    </div>
+
+    <!-- PAGE 8: 인터페이스, 데이터, 보안 요구사항 (INR, DAR, SEC) -->
+    <div class="page">
+      <div class="sub-title">3. 인터페이스 요구사항 (INR : Interface Requirement)</div>
+
+      <!-- INR-001: EXCEPTION_MISSING 반영 -->
+      <table class="req-detail-table">
+        <tr>
+          <th class="col-header">요구사항 분류</th>
+          <td class="col-value">인터페이스</td>
+          <th class="col-header">요구사항 번호</th>
+          <td class="col-value"><strong>INR-001</strong></td>
+        </tr>
+        <tr>
+          <th class="col-header">요구사항 명칭</th>
+          <td colspan="3"><strong>외부 유통망 및 시험기관 연계 API 제공</strong></td>
+        </tr>
+        <tr>
+          <th class="col-header" rowspan="2">상세 설명</th>
+          <td colspan="3" class="sub-header"><strong>[정의]</strong> 이력 데이터의 실시간 동기화를 위한 RESTful API 제공</td>
+        </tr>
+        <tr>
+          <td colspan="3" class="content-box">
+            <strong>[세부내용]</strong><br>
+            o 유통 플랫폼 및 참여 제조사 ERP와의 안전한 데이터 교환을 위한 표준 REST API 인터페이스를 설계 및 제공하여야 함.<br>
+            o API 호출 인증 및 권한 관리를 위한 API Key 및 토큰 기반 보안 체계를 적용하여야 함.<br>
+            o 대외 연계 기관과의 네트워크 단절 또는 API 응답 지연 등 장애 발생 시 적절히 처리하고 재시도하여야 함.
+          </td>
+        </tr>
+        <tr>
+          <th class="col-header">요구 산출물</th>
+          <td colspan="3">인터페이스 설계서, API 연계 규격서</td>
+        </tr>
+      </table>
+
+      <div class="sub-title" style="margin-top: 14px;">4. 데이터 및 보안 요구사항 (DAR, SEC)</div>
+
+      <!-- DAR-001: 데이터 표준 (명확한 기준) -->
+      <table class="req-detail-table">
+        <tr>
+          <th class="col-header">요구사항 분류</th>
+          <td class="col-value">데이터 요구사항</td>
+          <th class="col-header">요구사항 번호</th>
+          <td class="col-value"><strong>DAR-001</strong></td>
+        </tr>
+        <tr>
+          <th class="col-header">요구사항 명칭</th>
+          <td colspan="3"><strong>공공 데이터 표준 관리 및 원장 데이터 구조화</strong></td>
+        </tr>
+        <tr>
+          <th class="col-header" rowspan="2">상세 설명</th>
+          <td colspan="3" class="sub-header"><strong>[정의]</strong> 공공 데이터 표준 지침 준수 및 블록체인 원장 데이터 모델 수립</td>
+        </tr>
+        <tr>
+          <td colspan="3" class="content-box">
+            <strong>[세부내용]</strong><br>
+            o 행정안전부 공공기관 데이터 표준 지침에 따라 공통 코드, 용어 사전, 도메인 정의서를 작성하여 일관성을 유지하여야 함.<br>
+            o 온체인 트랜잭션 페이로드는 최소화하고 대용량 첨부 문서(성적서 사본 등)는 해시값 검증 기반의 외부 스토리지에 분리 저장하여야 함.
+          </td>
+        </tr>
+        <tr>
+          <th class="col-header">요구 산출물</th>
+          <td colspan="3">데이터 표준 정의서, 데이터 사전</td>
+        </tr>
+      </table>
+
+      <!-- SEC-001: TERM_AMBIGUOUS 반영 -->
+      <table class="req-detail-table">
+        <tr>
+          <th class="col-header">요구사항 분류</th>
+          <td class="col-value">보안 요구사항</td>
+          <th class="col-header">요구사항 번호</th>
+          <td class="col-value"><strong>SEC-001</strong></td>
+        </tr>
+        <tr>
+          <th class="col-header">요구사항 명칭</th>
+          <td colspan="3"><strong>플랫폼 정보보호 체계 및 이력 데이터 보안</strong></td>
+        </tr>
+        <tr>
+          <th class="col-header" rowspan="2">상세 설명</th>
+          <td colspan="3" class="sub-header"><strong>[정의]</strong> 정보보호 관리체계 수립 및 플랫폼 저장·전송 데이터 보안</td>
+        </tr>
+        <tr>
+          <td colspan="3" class="content-box">
+            <strong>[세부내용]</strong><br>
+            o 행정안전부 SW 개발보안 가이드(시큐어 코딩)를 준수하여 웹 취약점을 사전에 점검 및 조치하여야 함.<br>
+            o 전송 구간 암호화(TLS 1.3 이상) 및 데이터베이스 암호화(AES-256)를 적용하여야 함.<br>
+            o 플랫폼에 저장되는 참여기업의 제조 원가 및 공급망 중요 데이터는 안전하게 관리하여 외부 유출을 방지하여야 함.
+          </td>
+        </tr>
+        <tr>
+          <th class="col-header">요구 산출물</th>
+          <td colspan="3">시큐어코딩 진단 결과서, 보안 점검표</td>
+        </tr>
+      </table>
+
+      <div class="callout-box" style="margin-top: 10px;">
+        <strong>[검수 및 승인 기준]</strong><br>
+        본 사업의 모든 과업 요구사항은 제안요청서의 세부내용에 명시된 기준을 충족하여야 하며, 정량적·정성적 성능 지표에 대한 공식 시험 성적서 제출 및 수요부서의 최종 확인을 거쳐 완료 처리됩니다.
+      </div>
+
+      <div class="page-footer">- 8 -</div>
+    </div>
+
+  </div>
+
+</body>
+</html>
