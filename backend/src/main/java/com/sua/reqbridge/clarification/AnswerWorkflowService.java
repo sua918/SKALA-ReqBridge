@@ -11,7 +11,8 @@ import com.sua.reqbridge.ambiguity.AmbiguityIssue;
 import com.sua.reqbridge.ambiguity.AmbiguityIssueRepository;
 import com.sua.reqbridge.analysis.Analysis;
 import com.sua.reqbridge.analysis.AnalysisRepository;
-import com.sua.reqbridge.analysis.MockWorkflowAnalyzer;
+import com.sua.reqbridge.analysis.AiOutputInvalidException;
+import com.sua.reqbridge.analysis.AnalyzerOutputValidator;
 import com.sua.reqbridge.contract.AnalysisKind;
 import com.sua.reqbridge.contract.AnalysisStatus;
 import com.sua.reqbridge.contract.ClarificationStatus;
@@ -21,15 +22,18 @@ import com.sua.reqbridge.contract.RequirementSnapshot;
 import com.sua.reqbridge.contract.RequirementStatus;
 import com.sua.reqbridge.contract.ResourceNotFoundException;
 import com.sua.reqbridge.contract.StateConflictException;
+import com.sua.reqbridge.contract.ai.AnswerAssessment;
+import com.sua.reqbridge.contract.ai.AnswerAssessmentInput;
+import com.sua.reqbridge.contract.ai.RevisionGenerationInput;
+import com.sua.reqbridge.contract.ai.RevisionGenerationInput.ClarificationContext;
+import com.sua.reqbridge.contract.ai.RevisionProposal;
+import com.sua.reqbridge.contract.ai.WorkflowAnalyzer;
 import com.sua.reqbridge.revision.RequirementRevisionRepository;
 import com.sua.reqbridge.revision.RequirementRevision;
 
 import tools.jackson.databind.ObjectMapper;
 
 public class AnswerWorkflowService {
-
-	private static final String PROPOSED_TEXT = "시스템은 최대 동시 사용자 3,000명의 상품 조회 부하 시험을 10분간 수행할 때 "
-			+ "p95 응답 시간 2초 이하, 성공 응답 비율 99.9% 이상을 만족해야 한다.";
 
 	private static final List<AnalysisStatus> ACTIVE = List.of(
 			AnalysisStatus.PENDING, AnalysisStatus.PROCESSING);
@@ -44,13 +48,13 @@ public class AnswerWorkflowService {
 	private final RequirementRevisionRepository revisions;
 	private final CoreRequirementPort core;
 	private final ApplicationEventPublisher events;
-	private final MockWorkflowAnalyzer analyzer;
+	private final WorkflowAnalyzer analyzer;
 	private final ObjectMapper json;
 
 	public AnswerWorkflowService(AnalysisRepository analyses, AmbiguityIssueRepository issues,
 			ClarificationRepository clarifications, RequirementRevisionRepository revisions,
 			CoreRequirementPort core, ApplicationEventPublisher events,
-			MockWorkflowAnalyzer analyzer, ObjectMapper json) {
+			WorkflowAnalyzer analyzer, ObjectMapper json) {
 		this.analyses = analyses;
 		this.issues = issues;
 		this.clarifications = clarifications;
@@ -93,9 +97,28 @@ public class AnswerWorkflowService {
 
 		clarification.answer(answer);
 		long version = core.advanceContentVersion(requirement.id(), expectedVersion);
+
+		AmbiguityIssue issue = issues.findById(clarification.getIssueId())
+				.orElseThrow(() -> new ResourceNotFoundException("불명확성 문제를 찾을 수 없습니다."));
+		String requirementText = requirement.originalText() != null ? requirement.originalText() : "";
+		List<AnswerAssessmentInput.ClarificationHistory> history = clarifications
+				.findByRequirementIdOrderByIssueIdAscRoundNoAsc(requirement.id()).stream()
+				.filter(item -> item.getIssueId() == issue.getId()
+						&& item.getId() != clarification.getId()
+						&& item.getAnswerText() != null)
+				.map(item -> new AnswerAssessmentInput.ClarificationHistory(
+						item.getId(), item.getRoundNo(), item.getQuestionText(), item.getAnswerText()))
+				.toList();
+
+		AnswerAssessmentInput assessmentInput = new AnswerAssessmentInput(
+				requirement.id(), version, requirementText,
+				issue.getType(), issue.getEvidence(),
+				clarificationId, clarification.getIssueId(), clarification.getRoundNo(),
+				clarification.getQuestionText(), answer, history);
+
 		Analysis analysis = analyses.save(Analysis.pendingAnswer(requirement.documentId(), requirement.id(),
-				clarificationId, version, json.writeValueAsString(
-						new AnswerInput(clarificationId, clarification.getIssueId(), answer, version))));
+				clarificationId, version, json.writeValueAsString(assessmentInput),
+				analyzer.adapterType(), analyzer.schemaVersion()));
 		events.publishEvent(new AnswerAnalysisRequested(analysis.getId()));
 		return new AnswerReceipt(clarificationId, requirement.id(), version, analysis);
 	}
@@ -108,7 +131,33 @@ public class AnswerWorkflowService {
 		Clarification clarification = clarification(analysis.getClarificationId());
 		AmbiguityIssue issue = issues.findById(clarification.getIssueId())
 				.orElseThrow(() -> new ResourceNotFoundException("불명확성 문제를 찾을 수 없습니다."));
-		MockWorkflowAnalyzer.Assessment assessed = analyzer.assess(clarification.getAnswerText());
+
+		AnswerAssessmentInput input;
+		try {
+			input = json.readValue(analysis.getInputSnapshot(), AnswerAssessmentInput.class);
+		}
+		catch (Exception e) {
+			RequirementSnapshot requirement = core.getRequirement(analysis.getRequirementId());
+			String requirementText = requirement != null ? requirement.originalText() : "";
+			long contentVersion = requirement != null ? requirement.contentVersion() : analysis.getInputContentVersion();
+			List<AnswerAssessmentInput.ClarificationHistory> history = clarifications
+					.findByRequirementIdOrderByIssueIdAscRoundNoAsc(analysis.getRequirementId()).stream()
+					.filter(item -> item.getIssueId() == issue.getId()
+							&& item.getId() != clarification.getId()
+							&& item.getAnswerText() != null)
+					.map(item -> new AnswerAssessmentInput.ClarificationHistory(
+							item.getId(), item.getRoundNo(), item.getQuestionText(), item.getAnswerText()))
+					.toList();
+			input = new AnswerAssessmentInput(
+					analysis.getRequirementId(), contentVersion, requirementText,
+					issue.getType(), issue.getEvidence(),
+					clarification.getId(), clarification.getIssueId(), clarification.getRoundNo(),
+					clarification.getQuestionText(), clarification.getAnswerText(), history);
+		}
+
+		AnswerAssessment assessed = analyzer.assessAnswer(input);
+		com.sua.reqbridge.analysis.AnalyzerOutputValidator.validateAnswerAssessment(assessed);
+
 		Long nextId = null;
 		List<Long> revisionIds = List.of();
 		if (assessed.sufficient()) {
@@ -118,13 +167,23 @@ public class AnswerWorkflowService {
 					analysis.getRequirementId(), IssueStatus.OPEN) == 0) {
 				int revisionNo = revisions.findTopByRequirementIdOrderByRevisionNoDesc(
 						analysis.getRequirementId()).map(RequirementRevision::getRevisionNo).orElse(0) + 1;
-				List<Long> evidenceIds = clarifications
+				List<Clarification> answeredClarifications = clarifications
 						.findByRequirementIdOrderByIssueIdAscRoundNoAsc(analysis.getRequirementId()).stream()
 						.filter(item -> item.getAnswerText() != null)
+						.toList();
+				List<Long> evidenceIds = answeredClarifications.stream()
 						.map(Clarification::getId)
 						.toList();
+				String originalText = input.requirementText() != null ? input.requirementText() : "";
+				List<ClarificationContext> contexts = answeredClarifications.stream()
+						.map(item -> new ClarificationContext(
+								item.getId(), item.getIssueId(), item.getQuestionText(), item.getAnswerText()))
+						.toList();
+				RevisionProposal proposal = analyzer.generateRevision(new RevisionGenerationInput(
+						analysis.getRequirementId(), originalText, contexts, null));
+				com.sua.reqbridge.analysis.AnalyzerOutputValidator.validateRevisionProposal(proposal);
 				RequirementRevision revision = revisions.save(RequirementRevision.proposed(
-						analysis.getRequirementId(), revisionNo, PROPOSED_TEXT,
+						analysis.getRequirementId(), revisionNo, proposal.proposedText(),
 						analysis.getInputContentVersion(), evidenceIds));
 				core.changeStatus(analysis.getRequirementId(),
 						analysis.getInputContentVersion(), RequirementStatus.IN_REVIEW);

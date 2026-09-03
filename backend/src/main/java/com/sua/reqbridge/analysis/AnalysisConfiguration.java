@@ -1,6 +1,7 @@
 package com.sua.reqbridge.analysis;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -11,6 +12,7 @@ import com.sua.reqbridge.clarification.ClarificationRepository;
 import com.sua.reqbridge.clarification.AnswerAnalysisWorker;
 import com.sua.reqbridge.clarification.AnswerWorkflowService;
 import com.sua.reqbridge.contract.CoreRequirementPort;
+import com.sua.reqbridge.contract.ai.WorkflowAnalyzer;
 import com.sua.reqbridge.revision.RequirementRevisionRepository;
 
 import tools.jackson.databind.ObjectMapper;
@@ -20,8 +22,9 @@ import tools.jackson.databind.ObjectMapper;
 public class AnalysisConfiguration {
 
 	@Bean
+	@ConditionalOnProperty(name = "reqbridge.ai.provider", havingValue = "mock", matchIfMissing = true)
 	@ConditionalOnBean(CoreRequirementPort.class)
-	MockWorkflowAnalyzer mockWorkflowAnalyzer() {
+	WorkflowAnalyzer mockWorkflowAnalyzer() {
 		return new MockWorkflowAnalyzer();
 	}
 
@@ -32,7 +35,7 @@ public class AnalysisConfiguration {
 			ClarificationRepository clarifications,
 			CoreRequirementPort core,
 			ApplicationEventPublisher events,
-			MockWorkflowAnalyzer analyzer,
+			WorkflowAnalyzer analyzer,
 			ObjectMapper json) {
 		return new DocumentAnalysisService(
 				analyses, issues, clarifications, core, events, analyzer, json);
@@ -49,7 +52,7 @@ public class AnalysisConfiguration {
 	AnswerWorkflowService answerWorkflowService(AnalysisRepository analyses,
 			AmbiguityIssueRepository issues, ClarificationRepository clarifications,
 			RequirementRevisionRepository revisions, CoreRequirementPort core,
-			ApplicationEventPublisher events, MockWorkflowAnalyzer analyzer, ObjectMapper json) {
+			ApplicationEventPublisher events, WorkflowAnalyzer analyzer, ObjectMapper json) {
 		return new AnswerWorkflowService(
 				analyses, issues, clarifications, revisions, core, events, analyzer, json);
 	}
@@ -70,9 +73,10 @@ public class AnalysisConfiguration {
 			RequirementRevisionRepository revisions,
 			CoreRequirementPort core,
 			ApplicationEventPublisher events,
+			WorkflowAnalyzer analyzer,
 			ObjectMapper json) {
 		return new com.sua.reqbridge.revision.RevisionWorkflowService(
-				analyses, issues, clarifications, revisions, core, events, json);
+				analyses, issues, clarifications, revisions, core, events, analyzer, json);
 	}
 
 	@Bean

@@ -57,7 +57,8 @@ class RevisionWorkflowServiceTests {
 		core = mock(CoreRequirementPort.class);
 		events = mock(ApplicationEventPublisher.class);
 		json = new ObjectMapper();
-		service = new RevisionWorkflowService(analyses, issues, clarifications, revisions, core, events, json);
+		service = new RevisionWorkflowService(analyses, issues, clarifications, revisions, core, events,
+				new com.sua.reqbridge.analysis.MockWorkflowAnalyzer(), json);
 	}
 
 	@Test

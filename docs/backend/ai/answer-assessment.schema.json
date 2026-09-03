@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AnswerAssessmentResult",
+  "description": "ReqBridge LLM 답변 충분성 판정 결과 스키마 (schemaVersion: 1.0.0)",
+  "type": "object",
+  "required": ["sufficient", "reason"],
+  "properties": {
+    "sufficient": {
+      "type": "boolean",
+      "description": "고객 답변이 모호성을 해소하기에 충분한지 여부"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "충분/불충분 판정 근거 사유"
+    },
+    "nextQuestionText": {
+      "type": ["string", "null"],
+      "description": "불충분할 경우 다음 라운드에서 고객에게 물어볼 구체적인 후속 질문 (충분할 경우 null)"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "sufficient": { "const": false } }
+      },
+      "then": {
+        "properties": {
+          "nextQuestionText": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["nextQuestionText"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "sufficient": { "const": true } }
+      },
+      "then": {
+        "properties": {
+          "nextQuestionText": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

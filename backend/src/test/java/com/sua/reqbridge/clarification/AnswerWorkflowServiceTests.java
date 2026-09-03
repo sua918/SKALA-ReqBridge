@@ -292,6 +292,10 @@ class AnswerWorkflowServiceTests {
 		RequirementSnapshot requirement = new RequirementSnapshot(
 				401, 101, 301, 1, "원문", RequirementStatus.CLARIFYING, 1, null, null);
 
+		AmbiguityIssue issue = AmbiguityIssue.open(401, AmbiguityType.QUANTITY_MISSING, "근거");
+		ReflectionTestUtils.setField(issue, "id", 501L);
+		when(issues.findById(501L)).thenReturn(Optional.of(issue));
+
 		when(clarifications.findById(601L)).thenReturn(Optional.of(clarification));
 		when(core.lockRequirement(401L)).thenReturn(requirement);
 		when(core.advanceContentVersion(401L, 1L)).thenReturn(2L);
