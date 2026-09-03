@@ -206,6 +206,85 @@ check('7절 retryOfAnalysisId', retry.analysis.retryOfAnalysisId, done.id)
 const again = store.retryAnalysisMock(done.id)
 check('7절 재시도 중복 생성 안 함', again.analysis.id, retry.analysis.id)
 
+
+// --- 5.17/5.18 Preview -----------------------------------------------------
+store.resetMockStore()
+
+// 분석 직후: 질문 2건이 열려 있는 상태
+let cp = store.getCustomerPreviewMock(101)
+check('5.17 documentId', cp.documentId, 101)
+check('5.17 documentTitle', cp.documentTitle, '상품 조회 서비스 요구사항')
+check('5.17 summary', cp.summary, {
+  totalRequirements: 1,
+  confirmedRequirements: 0,
+  openIssueCount: 2,
+  waitingQuestionCount: 2,
+})
+check('5.17 basis', cp.basis, [{ requirementId: 401, contentVersion: 1, approvedRevisionId: null }])
+check('5.17 요구사항 1건', cp.requirements.length, 1)
+check('5.17 질문 ID', cp.requirements[0].questions.map((q) => q.id), [601, 602])
+check('5.17 질문에 type 포함', cp.requirements[0].questions[0].type, 'QUANTITY_MISSING')
+check('5.17 질문에 evidence 포함', cp.requirements[0].questions[0].evidence, '많은 사용자의 정량 기준이 없다.')
+check('5.17 질문 필드 집합', Object.keys(cp.requirements[0].questions[0]).sort(), ['evidence', 'id', 'issueId', 'questionText', 'roundNo', 'type'])
+
+let dp = store.getDeveloperPreviewMock(101)
+check('5.18 확정 없음', dp.confirmedRequirements, [])
+check('5.18 미확정 1건', dp.unconfirmedRequirements.length, 1)
+check('5.18 미확정 status', dp.unconfirmedRequirements[0].status, 'CLARIFYING')
+check('5.18 미확정 문제 전부', dp.unconfirmedRequirements[0].issues.map((i) => i.id), [501, 502])
+check('5.18 미확정 질문 전부', dp.unconfirmedRequirements[0].questions.map((q) => q.id), [601, 602])
+
+// 한 문제만 해결한 중간 상태: 남은 질문만 고객용에 남는다
+r = store.submitAnswerMock(601, { answerText: '많이 접속할 것 같습니다.', expectedContentVersion: 1 })
+await settle(r.receipt.analysis.id)
+r = store.submitAnswerMock(603, { answerText: '최대 동시 사용자 3,000명입니다.', expectedContentVersion: 2 })
+await settle(r.receipt.analysis.id)
+
+cp = store.getCustomerPreviewMock(101)
+check('5.17 해결된 문제의 질문 제외', cp.requirements[0].questions.map((q) => q.id), [602])
+check('5.17 openIssueCount 1', cp.summary.openIssueCount, 1)
+check('5.17 waitingQuestionCount 1', cp.summary.waitingQuestionCount, 1)
+
+// 전부 해결 -> 수정안 -> 승인
+r = store.submitAnswerMock(602, { answerText: 'p95 응답 시간 2초 이하입니다.', expectedContentVersion: 3 })
+await settle(r.receipt.analysis.id)
+store.reviewRevisionMock(701, { decision: 'APPROVE', expectedContentVersion: 4 })
+
+cp = store.getCustomerPreviewMock(101)
+check('5.17 물을 게 없으면 요구사항 제외', cp.requirements, [])
+check('5.17 확정 후 summary', cp.summary, {
+  totalRequirements: 1,
+  confirmedRequirements: 1,
+  openIssueCount: 0,
+  waitingQuestionCount: 0,
+})
+check('5.17 basis는 확정 후에도 전부', cp.basis, [{ requirementId: 401, contentVersion: 4, approvedRevisionId: 701 }])
+
+dp = store.getDeveloperPreviewMock(101)
+check('5.18 확정 1건', dp.confirmedRequirements.length, 1)
+check('5.18 미확정 없음', dp.unconfirmedRequirements, [])
+const cr = dp.confirmedRequirements[0]
+check('5.18 contentVersion 4', cr.contentVersion, 4)
+check('5.18 승인 수정안 701', cr.approvedRevision.id, 701)
+check('5.18 승인 상태', cr.approvedRevision.status, 'APPROVED')
+check('5.18 inputContentVersion 4', cr.approvedRevision.inputContentVersion, 4)
+check('5.18 rejectionReason null', cr.approvedRevision.rejectionReason, null)
+check('5.18 근거 답변 ID 대응', cr.evidenceAnswers.map((a) => a.id), [601, 603, 602])
+check('5.18 근거 답변 본문', cr.evidenceAnswers.map((a) => a.answerText), [
+  '많이 접속할 것 같습니다.',
+  '최대 동시 사용자 3,000명입니다.',
+  'p95 응답 시간 2초 이하입니다.',
+])
+check('5.18 basedOnClarificationIds와 일치', cr.evidenceAnswers.map((a) => a.id).sort(), [...cr.approvedRevision.basedOnClarificationIds].sort())
+
+// 6.4: 확정본과 승인 수정안이 어긋나면 409
+const raw = store.getMockStore()
+raw.requirements.find((x) => x.id === 401).confirmedText = '손상된 확정본'
+check('6.4 불일치 시 409', store.getDeveloperPreviewMock(101).error, 'PREVIEW_VERSION_CONFLICT')
+
+check('5.17 없는 문서', store.getCustomerPreviewMock(999), null)
+check('5.18 없는 문서', store.getDeveloperPreviewMock(999), null)
+
 console.log('\n통과 ' + pass + ' / ' + (pass + fails.length))
 if (fails.length) {
   console.log('\n실패:')

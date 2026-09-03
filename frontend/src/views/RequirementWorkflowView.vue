@@ -47,6 +47,12 @@ const workflow = ref(null)
 const answerDrafts = reactive({})
 const rejectionReason = ref('')
 const submittingClarificationId = ref(null)
+/**
+ * 버전 충돌만 따로 알린다. 다른 409(진행 중·이미 답변함)는 「지금은 안 된다」지만,
+ * 버전 충돌은 「보고 있던 화면이 낡았다」라서 사용자가 할 일이 다르다 —
+ * 새로 온 내용을 읽고 다시 판단해야 한다.
+ */
+const staleVersionNotice = ref(false)
 const reviewing = ref(false)
 const regenerating = ref(false)
 
@@ -181,6 +187,7 @@ async function recoverFromConflict(error) {
   if (status !== 409) {
     return
   }
+  staleVersionNotice.value = isContentVersionConflict(error)
   try {
     await reloadWorkflow()
     watchAnalysis(workflow.value?.activeAnalysis)
@@ -192,6 +199,7 @@ async function recoverFromConflict(error) {
 async function onSubmitAnswer(clarification) {
   submittingClarificationId.value = clarification.id
   clearError()
+  staleVersionNotice.value = false
   try {
     const receipt = await submitAnswer(clarification.id, {
       answerText: answerDrafts[clarification.id] ?? '',
@@ -217,6 +225,7 @@ async function onReview(decision) {
   }
   reviewing.value = true
   clearError()
+  staleVersionNotice.value = false
   try {
     await reviewRevision(revision.id, {
       decision,
@@ -236,6 +245,7 @@ async function onReview(decision) {
 async function onRegenerate() {
   regenerating.value = true
   clearError()
+  staleVersionNotice.value = false
   try {
     const analysis = await recreateRevision(requirementId.value, {
       expectedContentVersion: contentVersion.value,
@@ -286,6 +296,11 @@ onMounted(() => {
     </header>
 
     <ErrorMessage v-if="hasError" :message="message" :field-errors="fieldErrors" />
+
+    <p v-if="staleVersionNotice" class="notice notice--stale">
+      다른 변경이 먼저 반영되어 최신 내용을 다시 불러왔습니다. 입력하신 내용은 그대로
+      두었으니, 바뀐 내용을 확인하고 다시 보내주세요.
+    </p>
 
     <p v-if="loading">불러오는 중…</p>
 
@@ -545,6 +560,14 @@ onMounted(() => {
   border: 1px solid #bfdbfe;
   background: #eff6ff;
   color: #1d4ed8;
+}
+
+.notice--stale {
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+  color: #92400e;
+  line-height: 1.6;
+  word-break: keep-all;
 }
 
 .issue {

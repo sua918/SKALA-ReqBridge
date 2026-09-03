@@ -221,14 +221,20 @@ onMounted(() => {
 <template>
   <section class="doc-page">
     <header class="doc-header">
-      <h1>{{ document?.title ?? '문서' }}</h1>
-      <p class="doc-meta">
-        문서 #{{ documentId }}
-        <template v-if="latestAnalysisStatus">
-          ·
-          <StatusBadge kind="analysis" :value="latestAnalysisStatus" />
-        </template>
-      </p>
+      <div>
+        <h1>{{ document?.title ?? '문서' }}</h1>
+        <p class="doc-meta">
+          문서 #{{ documentId }}
+          <template v-if="latestAnalysisStatus">
+            ·
+            <StatusBadge kind="analysis" :value="latestAnalysisStatus" />
+          </template>
+        </p>
+      </div>
+      <!-- Preview 진입은 C(P2) 몫으로 비어 있던 자리다 (인계서 4.7). -->
+      <RouterLink class="preview-link" :to="{ name: 'document-preview', params: { documentId: String(documentId) } }">
+        Preview 열기
+      </RouterLink>
     </header>
 
     <ErrorMessage
@@ -299,6 +305,31 @@ onMounted(() => {
 <style scoped>
 .doc-page {
   max-width: 880px;
+}
+
+.doc-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.preview-link {
+  padding: 8px 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1d4ed8;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.preview-link:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
 }
 
 .doc-header h1 {

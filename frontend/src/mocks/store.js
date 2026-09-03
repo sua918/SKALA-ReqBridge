@@ -841,3 +841,167 @@ export function reviewRevisionMock(
 
   return { result: { revision: clone(revision), requirement: clone(requirement) } }
 }
+
+
+/* ---------------------------------------------------------------------------
+   Preview Mock (Spec 5.17~5.18 · 6.4) — C P2 담당.
+
+   Preview는 만들어 내는 화면이 아니라 「지금 저장된 것을 그대로 보여주는」
+   읽기 전용 조합이다. 여기서 질문·수정안을 새로 만들지 않는다 (Spec 2절 GET).
+   --------------------------------------------------------------------------- */
+
+function requirementsOfDocument(documentId) {
+  return store.requirements
+    .filter((r) => r.documentId === Number(documentId))
+    .sort((a, b) => a.sequenceNo - b.sequenceNo)
+}
+
+/** 문서 전체 기준 요약. 요구사항별이 아니라 문서 단위다 (Spec 5.17). */
+function previewSummary(requirements) {
+  const ids = new Set(requirements.map((r) => r.id))
+  return {
+    totalRequirements: requirements.length,
+    confirmedRequirements: requirements.filter(
+      (r) => r.status === RequirementStatus.CONFIRMED,
+    ).length,
+    openIssueCount: store.issues.filter(
+      (i) => ids.has(i.requirementId) && i.status === IssueStatus.OPEN,
+    ).length,
+    waitingQuestionCount: store.clarifications.filter(
+      (c) => ids.has(c.requirementId) && c.status === ClarificationStatus.WAITING,
+    ).length,
+  }
+}
+
+/** basis는 조회 당시 모든 요구사항의 버전이다 (Spec 6.4). 일부만 담지 않는다. */
+function previewBasis(requirements) {
+  return requirements.map((r) => ({
+    requirementId: r.id,
+    contentVersion: r.contentVersion,
+    approvedRevisionId: r.approvedRevisionId,
+  }))
+}
+
+/**
+ * GET /documents/{documentId}/previews/customer.
+ *
+ * 고객에게 나가는 문서라 「지금 답이 필요한 것」만 남긴다:
+ * OPEN 문제의 WAITING 질문. 물을 게 없는 요구사항은 목록에서 아예 뺀다.
+ */
+export function getCustomerPreviewMock(documentId) {
+  const document = findDocument(documentId)
+  if (!document) {
+    return null
+  }
+  store.analyses.forEach(settlePendingAnalysis)
+
+  const requirements = requirementsOfDocument(document.id)
+  const openIssueById = new Map(
+    store.issues
+      .filter((i) => i.status === IssueStatus.OPEN)
+      .map((i) => [i.id, i]),
+  )
+
+  const items = requirements
+    .map((requirement) => {
+      const questions = clarificationsOf(requirement.id)
+        .filter(
+          (c) => c.status === ClarificationStatus.WAITING && openIssueById.has(c.issueId),
+        )
+        .map((c) => {
+          const issue = openIssueById.get(c.issueId)
+          return {
+            id: c.id,
+            issueId: c.issueId,
+            type: issue.type,
+            evidence: issue.evidence,
+            roundNo: c.roundNo,
+            questionText: c.questionText,
+          }
+        })
+      return {
+        requirementId: requirement.id,
+        sequenceNo: requirement.sequenceNo,
+        originalText: requirement.originalText,
+        contentVersion: requirement.contentVersion,
+        questions,
+      }
+    })
+    //질문 없는 요구사항은 제외한다 (Spec 5.17).
+    .filter((item) => item.questions.length > 0)
+
+  return clone({
+    documentId: document.id,
+    documentTitle: document.title,
+    generatedAt: timestamp(),
+    summary: previewSummary(requirements),
+    basis: previewBasis(requirements),
+    requirements: items,
+  })
+}
+
+/**
+ * GET /documents/{documentId}/previews/developer.
+ *
+ * 확정된 것과 아직 아닌 것을 갈라 놓는다. 확정 쪽에는 승인된 수정안과
+ * 그 근거 답변만, 미확정 쪽에는 문제·질문 이력을 상태 필터 없이 전부 담는다.
+ */
+export function getDeveloperPreviewMock(documentId) {
+  const document = findDocument(documentId)
+  if (!document) {
+    return null
+  }
+  store.analyses.forEach(settlePendingAnalysis)
+
+  const requirements = requirementsOfDocument(document.id)
+  const confirmed = []
+  const unconfirmed = []
+
+  for (const requirement of requirements) {
+    if (requirement.status !== RequirementStatus.CONFIRMED) {
+      unconfirmed.push({
+        requirementId: requirement.id,
+        sequenceNo: requirement.sequenceNo,
+        originalText: requirement.originalText,
+        status: requirement.status,
+        contentVersion: requirement.contentVersion,
+        //상태별로 거르지 않는다 — 개발팀은 어떤 논의를 거쳤는지를 본다 (Spec 5.18).
+        issues: issuesOf(requirement.id),
+        questions: clarificationsOf(requirement.id),
+      })
+      continue
+    }
+
+    const approved = findRevision(requirement.approvedRevisionId)
+    //Spec 6.4: 확정본과 승인 수정안이 어긋나면 서로 다른 버전을 섞지 않고 409를 낸다.
+    if (
+      !approved ||
+      approved.status !== RevisionStatus.APPROVED ||
+      approved.requirementId !== requirement.id ||
+      approved.text !== requirement.confirmedText
+    ) {
+      return { error: 'PREVIEW_VERSION_CONFLICT' }
+    }
+
+    //근거 답변은 배열 위치가 아니라 ID로 대응시킨다 (Spec 6.4).
+    const basisIds = new Set(approved.basedOnClarificationIds)
+    confirmed.push({
+      requirementId: requirement.id,
+      sequenceNo: requirement.sequenceNo,
+      originalText: requirement.originalText,
+      contentVersion: requirement.contentVersion,
+      approvedRevision: approved,
+      evidenceAnswers: clarificationsOf(requirement.id).filter((c) => basisIds.has(c.id)),
+    })
+  }
+
+  return clone({
+    documentId: document.id,
+    documentTitle: document.title,
+    generatedAt: timestamp(),
+    summary: previewSummary(requirements),
+    basis: previewBasis(requirements),
+    confirmedRequirements: confirmed,
+    unconfirmedRequirements: unconfirmed,
+  })
+}
