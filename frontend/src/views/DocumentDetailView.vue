@@ -300,14 +300,14 @@ onMounted(() => {
 
       <!-- 작업 열: 요구사항 목록 -->
       <div class="right" data-reveal>
-        <div class="card list">
+        <div class="card list" data-reveal-stagger>
           <SectionLabel :text="'요구사항 ' + requirements.length + '건'" />
 
           <button
             v-for="requirement in requirements"
             :key="requirement.id"
             type="button"
-            class="rrow row"
+            class="rrow row stagger-child"
             @click="openRequirement(requirement.id)"
           >
             <div class="rhead">

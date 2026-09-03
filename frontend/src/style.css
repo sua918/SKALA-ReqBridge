@@ -289,9 +289,12 @@ button { font: inherit; }
 
 /** 자식 순차 등장 — --si는 useReveal이 인덱스로 주입한다. */
 .stagger-child { opacity: 0; transform: translate3d(0, 12px, 0) scale(.985); }
+/* 지연에 상한을 둔다. --si는 행 인덱스라 목록이 길면 그대로 늘어난다 —
+   문서 122건이면 마지막 행이 121 x .055 = 6.6초 뒤에야 나타난다.
+   앞의 열 몇 개만 순차로 흐르면 「살아 있다」는 인상은 충분하다. */
 [data-reveal-stagger].is-visible .stagger-child {
   animation: rb-pop-in .45s var(--ease) forwards;
-  animation-delay: calc(var(--si, 0) * .055s);
+  animation-delay: calc(min(var(--si, 0), 12) * .045s);
 }
 
 @keyframes rb-reveal-up { from { opacity: 0; transform: translate3d(0, 18px, 0); } to { opacity: 1; transform: none; } }
@@ -557,4 +560,63 @@ label.lbl:focus-within > span { color: var(--fg-950); }
     animation: none !important;
   }
   .float, .shimmer { animation: none !important; }
+}
+
+/* ── 마감 ────────────────────────────────────────────────────────────────
+   화면을 만들다 만 것처럼 보이게 하는 건 대개 큰 것이 아니라, 브라우저 기본값이
+   그대로 새어 나오는 자리다. 드래그 색·스크롤 막대·키보드 초점이 그렇다. */
+
+/* 텍스트를 끌면 윈도우 기본 파랑이 뜬다. 브랜드에 없는 색이 화면에 한 번
+   나타나는 순간 「남이 만든 부품」처럼 보인다. */
+::selection {
+  background: color-mix(in srgb, var(--logo-lav) 38%, transparent);
+  color: var(--fg-950);
+}
+
+/* 스크롤 막대. 두꺼운 회색 기본 막대가 종이 같은 화면 옆에 서 있으면 결이 깨진다. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-300) transparent;
+}
+
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--bg-300);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--bg-400); background-clip: content-box; }
+
+/* 키보드 초점. Tab으로 옮겨 다닐 때 지금 어디인지 보이지 않으면 화면을 쓸 수 없다.
+   :focus가 아니라 :focus-visible이라 마우스로 눌렀을 때는 뜨지 않는다. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--primary-600);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* 목록 행은 카드 폭을 꽉 채우므로 테두리를 안쪽으로 그려야 잘리지 않는다. */
+.card.list .row:focus-visible {
+  outline-offset: -2px;
+}
+
+/* ── 화면 전환 ───────────────────────────────────────────────────────────
+   링크를 눌렀을 때 화면이 툭 갈리면 「문서 두 장」이지 「한 서비스」로 안 읽힌다.
+   out-in이라 나갈 화면이 먼저 사라진 뒤 들어올 화면이 그려진다 — 둘이 겹쳐
+   높이가 튀는 일이 없다. 길이는 짧게 둔다. 업무 화면에서 전환이 길면 방해다. */
+.page-enter-active { transition: opacity .22s var(--ease), transform .22s var(--ease); }
+.page-leave-active { transition: opacity .13s ease-in; }
+.page-enter-from { opacity: 0; transform: translate3d(0, 8px, 0); }
+.page-leave-to { opacity: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter-active, .page-leave-active { transition: none; }
+  .page-enter-from { transform: none; }
 }

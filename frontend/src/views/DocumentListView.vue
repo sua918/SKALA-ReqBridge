@@ -128,14 +128,14 @@ onMounted(() => {
 
     <div v-else class="grid12">
       <div class="col-list">
-        <div class="card list">
+        <div class="card list" data-reveal-stagger>
           <SectionLabel :text="'문서 ' + documents.length + '건'" />
 
           <button
             v-for="doc in documents"
             :key="doc.id"
             type="button"
-            class="drow row"
+            class="drow row stagger-child"
             @click="openDocument(doc.id)"
           >
             <span class="fig did">{{ doc.id }}</span>

@@ -161,7 +161,14 @@ function toCrumb(item) {
     </header>
 
     <main class="app-main">
-      <RouterView />
+      <!-- 화면 전환. RouterView가 이 레이아웃 안에 있으므로 여기서 감싼다.
+           key를 fullPath로 두어 같은 컴포넌트라도 주소가 바뀌면 다시 그린다
+           (요구사항 #401 -> #402처럼 파라미터만 바뀌는 이동). -->
+      <RouterView v-slot="{ Component, route }">
+        <Transition name="page" mode="out-in">
+          <component :is="Component" :key="route.fullPath" />
+        </Transition>
+      </RouterView>
     </main>
   </div>
 </template>

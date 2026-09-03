@@ -91,14 +91,14 @@ onMounted(() => {
 
     <div v-else class="grid12">
       <div class="col-list">
-        <div class="card list">
+        <div class="card list" data-reveal-stagger>
           <SectionLabel :text="'프로젝트 ' + projects.length + '건'" />
 
           <button
             v-for="project in projects"
             :key="project.id"
             type="button"
-            class="prow row"
+            class="prow row stagger-child"
             @click="openProject(project.id)"
           >
             <div class="pbody">
