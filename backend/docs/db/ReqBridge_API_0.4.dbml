@@ -1,0 +1,263 @@
+Project ReqBridge {
+  database_type: 'PostgreSQL'
+  Note: 'API 0.4 / V1 + V2 + V3 + V4 최종 구조. 실제 적용은 Flyway SQL이 기준. 부분 UNIQUE 인덱스는 해당 테이블 Note 참조. Storage 객체는 외부 리소스이며 DB FK가 아님.'
+}
+
+Enum app.document_source_type {
+  TEXT
+  FILE
+}
+Enum app.analysis_status {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+Enum app.analysis_adapter_type {
+  MOCK
+  MANUAL
+  LLM
+}
+Enum app.analysis_kind {
+  DOCUMENT
+  ANSWER
+  REVISION
+}
+Enum app.requirement_status {
+  EXTRACTED
+  AMBIGUOUS
+  CLARIFYING
+  IN_REVIEW
+  CONFIRMED
+}
+Enum app.ambiguity_status {
+  OPEN
+  RESOLVED
+}
+Enum app.ambiguity_type {
+  QUANTITY_MISSING
+  PERFORMANCE_MISSING
+  CONDITION_MISSING
+  ACTOR_MISSING
+  SUCCESS_CRITERIA_MISSING
+  TERM_AMBIGUOUS
+  EXCEPTION_MISSING
+}
+Enum app.revision_source {
+  AI
+  MANUAL
+}
+Enum app.revision_status {
+  PROPOSED
+  APPROVED
+  REJECTED
+}
+Enum app.clarification_source {
+  AI
+  MANUAL
+}
+Enum app.clarification_status {
+  WAITING
+  ANSWERED
+  RESOLVED
+}
+Enum app.acceptance_criteria_source {
+  MOCK
+  AI
+  MANUAL
+}
+
+Table app.project {
+  id bigint [pk, increment]
+  name varchar(100) [not null]
+  description varchar(2000)
+  created_at timestamptz [not null, default: `CURRENT_TIMESTAMP`]
+}
+
+Table app.document {
+  id bigint [pk, increment]
+  project_id bigint [not null]
+  title varchar(200) [not null]
+  content text [not null, note: 'TEXT: 입력 원문 / FILE: PDF 추출 텍스트. API 최대 100000 코드 포인트']
+  source_type app.document_source_type [not null]
+  storage_path text [note: 'TEXT는 null. FILE은 documents/{projectId}/{uuid}.pdf. private bucket 내부 키; 외부 DTO 비노출']
+  original_filename text [note: 'TEXT는 null. FILE은 원본 파일명; object key로 사용하지 않음']
+  mime_type varchar(100) [note: 'FILE은 application/pdf']
+  file_size_bytes bigint [note: 'FILE은 1~10485760 bytes (10 MiB)']
+  created_at timestamptz [not null, default: `CURRENT_TIMESTAMP`]
+  indexes {
+    project_id [name: 'idx_document_project_id']
+  }
+  checks {
+    `(source_type = 'TEXT' AND storage_path IS NULL AND original_filename IS NULL AND mime_type IS NULL AND file_size_bytes IS NULL) OR (source_type = 'FILE' AND storage_path IS NOT NULL AND btrim(storage_path) <> '' AND original_filename IS NOT NULL AND btrim(original_filename) <> '' AND mime_type IS NOT NULL AND mime_type = 'application/pdf' AND file_size_bytes IS NOT NULL AND file_size_bytes BETWEEN 1 AND 10485760)` [name: 'ck_document_file_metadata']
+  }
+  Note: 'PDF binary는 Supabase private Storage에 보관. Document 한 개당 원본 파일 최대 한 개. 기존 TEXT 데이터 유지.'
+}
+
+Table app.analysis {
+  id bigint [pk, increment]
+  document_id bigint [not null]
+  kind app.analysis_kind [not null]
+  requirement_id bigint
+  clarification_id bigint
+  status app.analysis_status [not null, default: 'PENDING']
+  adapter_type app.analysis_adapter_type [not null]
+  schema_version varchar(50) [not null]
+  input_content_version bigint
+  retry_of_analysis_id bigint
+  input_snapshot jsonb [not null]
+  result jsonb
+  error_code varchar(100)
+  error_message text
+  raw_response jsonb
+  created_at timestamptz [not null, default: `CURRENT_TIMESTAMP`]
+  started_at timestamptz
+  completed_at timestamptz
+  indexes {
+    (id, document_id) [unique, name: 'uq_analysis_id_document']
+    document_id [name: 'idx_analysis_document_id']
+    status [name: 'idx_analysis_status']
+  }
+  checks {
+    `retry_of_analysis_id IS NULL OR retry_of_analysis_id <> id` [name: 'ck_analysis_not_self_retry']
+    `(kind = 'DOCUMENT' AND requirement_id IS NULL AND clarification_id IS NULL AND input_content_version IS NULL) OR (kind = 'ANSWER' AND requirement_id IS NOT NULL AND clarification_id IS NOT NULL AND input_content_version > 0) OR (kind = 'REVISION' AND requirement_id IS NOT NULL AND clarification_id IS NULL AND input_content_version > 0)` [name: 'ck_analysis_reference_by_kind']
+    `(status = 'PENDING' AND result IS NULL AND error_code IS NULL AND error_message IS NULL AND started_at IS NULL AND completed_at IS NULL) OR (status = 'PROCESSING' AND result IS NULL AND error_code IS NULL AND error_message IS NULL AND started_at IS NOT NULL AND completed_at IS NULL) OR (status = 'COMPLETED' AND result IS NOT NULL AND jsonb_typeof(result) = 'object' AND error_code IS NULL AND error_message IS NULL AND started_at IS NOT NULL AND completed_at IS NOT NULL) OR (status = 'FAILED' AND result IS NULL AND error_code IS NOT NULL AND error_message IS NOT NULL AND completed_at IS NOT NULL)` [name: 'ck_analysis_result_by_status']
+  }
+  Note: '''부분 UNIQUE(SQL에 유지):
+  uq_analysis_direct_retry: (retry_of_analysis_id) WHERE retry_of_analysis_id IS NOT NULL
+  uq_analysis_active_document: (document_id) WHERE kind = 'DOCUMENT' AND status IN ('PENDING','PROCESSING')
+  uq_analysis_active_requirement: (requirement_id) WHERE requirement_id IS NOT NULL AND status IN ('PENDING','PROCESSING')'''
+}
+
+Table app.requirement {
+  id bigint [pk, increment]
+  document_id bigint [not null]
+  analysis_id bigint [not null]
+  sequence_no integer [not null]
+  original_text text [not null]
+  status app.requirement_status [not null, default: 'EXTRACTED']
+  content_version bigint [not null, default: 1]
+  approved_revision_id bigint
+  confirmed_text text
+  confirmed_at timestamptz
+  lock_version bigint [not null, default: 0]
+  created_at timestamptz [not null, default: `CURRENT_TIMESTAMP`]
+  indexes {
+    (id, document_id) [unique, name: 'uq_requirement_id_document']
+    (analysis_id, sequence_no) [unique, name: 'uq_requirement_analysis_sequence']
+    document_id [name: 'idx_requirement_document_id']
+    analysis_id [name: 'idx_requirement_analysis_id']
+  }
+  checks {
+    `sequence_no > 0`
+    `content_version > 0`
+    `(status = 'CONFIRMED' AND approved_revision_id IS NOT NULL AND confirmed_text IS NOT NULL AND confirmed_at IS NOT NULL) OR (status <> 'CONFIRMED' AND approved_revision_id IS NULL AND confirmed_text IS NULL AND confirmed_at IS NULL)` [name: 'ck_requirement_confirmation']
+  }
+}
+
+Table app.ambiguity_issue {
+  id bigint [pk, increment]
+  requirement_id bigint [not null]
+  type app.ambiguity_type [not null]
+  evidence text [not null]
+  status app.ambiguity_status [not null, default: 'OPEN']
+  created_at timestamptz [not null, default: `CURRENT_TIMESTAMP`]
+  resolved_at timestamptz
+  indexes {
+    (id, requirement_id) [unique, name: 'uq_ambiguity_issue_id_requirement']
+    requirement_id [name: 'idx_ambiguity_issue_requirement_id']
+    status [name: 'idx_ambiguity_issue_status']
+  }
+}
+
+Table app.clarification {
+  id bigint [pk, increment]
+  requirement_id bigint [not null]
+  ambiguity_issue_id bigint [not null]
+  round_no integer [not null]
+  question_text text [not null]
+  question_source app.clarification_source [not null]
+  answer_text text
+  status app.clarification_status [not null, default: 'WAITING']
+  created_at timestamptz [not null, default: `CURRENT_TIMESTAMP`]
+  answered_at timestamptz
+  indexes {
+    (ambiguity_issue_id, round_no) [unique, name: 'uq_clarification_issue_round']
+    (id, requirement_id) [unique, name: 'uq_clarification_id_requirement']
+    requirement_id [name: 'idx_clarification_requirement_id']
+    ambiguity_issue_id [name: 'idx_clarification_issue_id']
+  }
+  checks {
+    `round_no > 0`
+  }
+}
+
+Table app.requirement_revision {
+  id bigint [pk, increment]
+  requirement_id bigint [not null]
+  input_content_version bigint [not null]
+  revision_no integer [not null]
+  proposed_text text [not null]
+  source app.revision_source [not null]
+  status app.revision_status [not null, default: 'PROPOSED']
+  rejection_reason text
+  created_at timestamptz [not null, default: `CURRENT_TIMESTAMP`]
+  approved_at timestamptz
+  reviewed_at timestamptz
+  indexes {
+    (requirement_id, revision_no) [unique, name: 'uq_revision_requirement_number']
+    (id, requirement_id) [unique, name: 'uq_revision_id_requirement']
+    requirement_id [name: 'idx_revision_requirement_id']
+  }
+  checks {
+    `input_content_version > 0`
+    `revision_no > 0`
+    `(status = 'PROPOSED' AND reviewed_at IS NULL AND approved_at IS NULL AND rejection_reason IS NULL) OR (status = 'APPROVED' AND reviewed_at IS NOT NULL AND approved_at IS NOT NULL AND rejection_reason IS NULL) OR (status = 'REJECTED' AND reviewed_at IS NOT NULL AND approved_at IS NULL AND rejection_reason IS NOT NULL AND btrim(rejection_reason) <> '')` [name: 'ck_revision_review_fields']
+  }
+  Note: "부분 UNIQUE: uq_revision_single_proposed ON (requirement_id) WHERE status = 'PROPOSED'. 실제 제약은 SQL 참조."
+}
+
+Table app.revision_clarification {
+  revision_id bigint [not null]
+  clarification_id bigint [not null]
+  requirement_id bigint [not null]
+  indexes {
+    (revision_id, clarification_id) [pk]
+    clarification_id [name: 'idx_revision_clarification_clarification_id']
+  }
+}
+
+Table app.acceptance_criteria {
+  id bigint [pk, increment]
+  revision_id bigint [not null]
+  sequence_no integer [not null]
+  given_text text [not null]
+  when_text text [not null]
+  then_text text [not null]
+  source app.acceptance_criteria_source [not null]
+  created_at timestamptz [not null, default: `CURRENT_TIMESTAMP`]
+  indexes {
+    (revision_id, sequence_no) [unique, name: 'uq_acceptance_criteria_revision_sequence']
+    revision_id [name: 'idx_acceptance_criteria_revision_id']
+  }
+  checks {
+    `sequence_no > 0`
+  }
+  Note: 'P3. P1/P2 API는 acceptanceCriteria=[] 유지.'
+}
+
+Ref: app.document.project_id > app.project.id
+Ref: app.analysis.document_id > app.document.id
+Ref: app.analysis.retry_of_analysis_id > app.analysis.id
+Ref: app.requirement.(analysis_id, document_id) > app.analysis.(id, document_id)
+Ref: app.ambiguity_issue.requirement_id > app.requirement.id
+Ref: app.clarification.requirement_id > app.requirement.id
+Ref: app.clarification.(ambiguity_issue_id, requirement_id) > app.ambiguity_issue.(id, requirement_id)
+Ref: app.analysis.(requirement_id, document_id) > app.requirement.(id, document_id)
+Ref: app.analysis.(clarification_id, requirement_id) > app.clarification.(id, requirement_id)
+Ref: app.requirement_revision.requirement_id > app.requirement.id
+Ref: app.requirement.(approved_revision_id, id) > app.requirement_revision.(id, requirement_id)
+Ref: app.revision_clarification.requirement_id > app.requirement.id
+Ref: app.revision_clarification.(revision_id, requirement_id) > app.requirement_revision.(id, requirement_id)
+Ref: app.revision_clarification.(clarification_id, requirement_id) > app.clarification.(id, requirement_id)
+Ref: app.acceptance_criteria.revision_id > app.requirement_revision.id

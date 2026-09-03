@@ -12,6 +12,8 @@ import java.time.Instant;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
@@ -50,6 +52,16 @@ class DocumentControllerTests {
 					.content("""
 							{"title":"파일","sourceType":"FILE","content":"원문"}
 							"""))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"null", "0", "1", "\"text\"", "\"UNKNOWN\""})
+	void rejectsInvalidSourceType(String sourceType) throws Exception {
+		mockMvc.perform(post("/api/projects/1/documents")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"title\":\"Title\",\"content\":\"Text\",\"sourceType\":" + sourceType + "}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
 	}

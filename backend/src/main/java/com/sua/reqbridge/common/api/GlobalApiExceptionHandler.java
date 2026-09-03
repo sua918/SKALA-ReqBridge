@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.web.multipart.MultipartException;
 
 import com.sua.reqbridge.contract.ResourceNotFoundException;
 import com.sua.reqbridge.contract.StateConflictException;
@@ -27,6 +28,12 @@ import jakarta.validation.ConstraintViolationException;
 public class GlobalApiExceptionHandler {
 
 	private static final Logger log = LoggerFactory.getLogger(GlobalApiExceptionHandler.class);
+
+	@ExceptionHandler(MultipartException.class)
+	public ResponseEntity<ApiErrorResponse> handleMultipart(MultipartException exception) {
+		return error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR",
+				"multipart 요청을 확인해주세요. PDF 한 개, 최대 10MB까지 허용합니다.", List.of());
+	}
 
 	@ExceptionHandler(ResourceNotFoundException.class)
 	public ResponseEntity<ApiErrorResponse> handleNotFound(ResourceNotFoundException exception) {

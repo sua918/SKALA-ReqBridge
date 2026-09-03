@@ -37,6 +37,18 @@ public class Document {
 	@Column(name = "source_type", nullable = false, columnDefinition = "document_source_type")
 	private DocumentSourceType sourceType;
 
+	@Column(name = "storage_path", columnDefinition = "text")
+	private String storagePath;
+
+	@Column(name = "original_filename", columnDefinition = "text")
+	private String originalFilename;
+
+	@Column(name = "mime_type", length = 100)
+	private String mimeType;
+
+	@Column(name = "file_size_bytes")
+	private Long fileSizeBytes;
+
 	@CreationTimestamp
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
@@ -45,10 +57,45 @@ public class Document {
 	}
 
 	public Document(long projectId, String title, String content, DocumentSourceType sourceType) {
+		if (sourceType != DocumentSourceType.TEXT) {
+			throw new IllegalArgumentException("FILE documents require file metadata");
+		}
 		this.projectId = projectId;
 		this.title = title;
 		this.content = content;
 		this.sourceType = sourceType;
+	}
+
+	public static Document fromPdf(long projectId, String title, String content,
+			String storagePath, String originalFilename, long fileSizeBytes) {
+		if (storagePath == null || storagePath.isBlank() || originalFilename == null
+				|| originalFilename.isBlank() || fileSizeBytes <= 0
+				|| fileSizeBytes > PdfTextExtractor.MAX_FILE_BYTES) {
+			throw new IllegalArgumentException("Invalid PDF metadata");
+		}
+		Document document = new Document(projectId, title, content, DocumentSourceType.TEXT);
+		document.sourceType = DocumentSourceType.FILE;
+		document.storagePath = storagePath;
+		document.originalFilename = originalFilename;
+		document.mimeType = "application/pdf";
+		document.fileSizeBytes = fileSizeBytes;
+		return document;
+	}
+
+	public String getStoragePath() {
+		return storagePath;
+	}
+
+	public String getOriginalFilename() {
+		return originalFilename;
+	}
+
+	public String getMimeType() {
+		return mimeType;
+	}
+
+	public Long getFileSizeBytes() {
+		return fileSizeBytes;
 	}
 
 	public Long getId() {
