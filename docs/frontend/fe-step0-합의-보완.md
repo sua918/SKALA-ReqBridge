@@ -47,7 +47,7 @@ PR 리뷰·명세 대조에서 드러난 공백(실행 모드, Mock 경계, Ambi
 - 판정은 `frontend/vite.config.js` 한 곳에서 한다. 화면·API 함수는 `@/api/config`의 `useMock`만 본다.
 - `.env.development`는 gitignore 대상이라 팀에 공유되지 않으므로 사용하지 않는다.
 
-**B 구현:** 반영됨 (`README.md` · `.env.example` · `package.json`의 `dev:mock` 포함).
+**B 구현:** 반영됨 (`README.md` 실행 모드 표 · `package.json`의 `dev:mock`). Mock 안내는 `.env.example`에 두지 않고 `npm run dev:mock`으로 통일한다.
 
 ---
 
@@ -195,10 +195,11 @@ C 담당(`/requirements/:requirementId`, Preview)은 변하지 않는다.
 
 | 파일 | 변경 |
 | --- | --- |
-| `README.md` | 프런트엔드 실행 모드 표 |
-| `.env.example` | `VITE_USE_MOCK` 주석 |
+| `README.md` | 프런트엔드 실행 모드 표 (`dev` / `dev:mock`) |
 
-백엔드 코드·DB·API 명세는 변경하지 않았다. 파일 소유는 팀 공용이므로 PM 확인이 필요하다.
+`.env.example`에는 `VITE_USE_MOCK`을 적지 않는다. 혼동을 피하기 위해 Mock은 `npm run dev:mock`만 안내한다.
+
+백엔드 코드·DB·API 명세는 변경하지 않았다. `README.md` 소유는 팀 공용이므로 PM 확인이 필요하다.
 
 ---
 

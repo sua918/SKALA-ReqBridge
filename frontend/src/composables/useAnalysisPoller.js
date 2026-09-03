@@ -7,6 +7,9 @@ const TERMINAL = new Set([AnalysisStatus.COMPLETED, AnalysisStatus.FAILED])
 /**
  * 분석 상태 1초 polling (B·C 공용 로직, 상태는 호출 화면마다 독립).
  *
+ * 이전 요청이 끝나기 전에는 다음 tick을 건너뛴다 (`inFlight`).
+ * `stop()` / 재`start()` 이후 늦게 도착한 응답은 세대 ID로 무시한다.
+ *
  * @param {object} [options]
  * @param {number} [options.intervalMs=1000]
  * @param {(analysis: object) => void|Promise<void>} [options.onComplete]
@@ -27,6 +30,8 @@ export function useAnalysisPoller(options = {}) {
 
   let timerId = null
   let activeAnalysisId = null
+  let inFlight = false
+  let requestGeneration = 0
 
   function clearTimer() {
     if (timerId != null) {
@@ -39,30 +44,55 @@ export function useAnalysisPoller(options = {}) {
     clearTimer()
     isPolling.value = false
     activeAnalysisId = null
+    //진행 중 요청의 응답이 상태를 덮어쓰지 못하게 세대를 올리고, 다음 start의 tick이 막히지 않게 inFlight를 푼다.
+    requestGeneration += 1
+    inFlight = false
   }
 
   async function tick() {
-    if (activeAnalysisId == null) {
+    if (activeAnalysisId == null || inFlight) {
       return
     }
 
-    try {
-      const next = await getAnalysis(activeAnalysisId)
-      analysis.value = next
-      lastError.value = null
+    const generation = requestGeneration
+    const analysisId = activeAnalysisId
+    inFlight = true
 
-      if (TERMINAL.has(next.status)) {
-        stop()
-        //콜백이 async면 그 실패도 onError로 이어져야 한다.
-        if (next.status === AnalysisStatus.COMPLETED) {
-          await handlers.onComplete?.(next)
-        } else {
-          await handlers.onFailed?.(next)
-        }
+    let next
+    try {
+      next = await getAnalysis(analysisId)
+    } catch (error) {
+      if (generation !== requestGeneration) {
+        return
+      }
+      lastError.value = error
+      stop()
+      handlers.onError?.(error)
+      return
+    }
+
+    if (generation !== requestGeneration) {
+      return
+    }
+
+    analysis.value = next
+    lastError.value = null
+
+    if (!TERMINAL.has(next.status)) {
+      inFlight = false
+      return
+    }
+
+    //종료 상태면 먼저 polling을 끊고, 콜백 오류는 세대와 무관하게 onError로 보낸다.
+    stop()
+    try {
+      if (next.status === AnalysisStatus.COMPLETED) {
+        await handlers.onComplete?.(next)
+      } else {
+        await handlers.onFailed?.(next)
       }
     } catch (error) {
       lastError.value = error
-      stop()
       handlers.onError?.(error)
     }
   }
