@@ -30,6 +30,7 @@ public interface CoreRequirementPort {
 	long advanceContentVersion(long requirementId, long expectedContentVersion);
 
 	/**
+	 * {@code CONFIRMED}를 제외한 업무 상태 전이를 수행한다.
 	 * {@code EXTRACTED}, {@code AMBIGUOUS}, {@code CLARIFYING}, {@code IN_REVIEW}
 	 * 사이의 일반 상태 전이만 수행한다.
 	 * 최종 확정에는 {@link #confirmRequirement(long, long, long, String)}를 사용한다.
