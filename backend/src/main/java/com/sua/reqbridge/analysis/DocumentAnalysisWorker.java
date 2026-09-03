@@ -18,8 +18,11 @@ public class DocumentAnalysisWorker {
 		try {
 			service.executeDocument(request.analysisId());
 		}
-		catch (RuntimeException exception) {
+		catch (AiOutputInvalidException exception) {
 			service.fail(request.analysisId(), "AI_OUTPUT_INVALID", "분석 결과 형식이 올바르지 않습니다.");
+		}
+		catch (RuntimeException exception) {
+			service.fail(request.analysisId(), "ANALYSIS_EXECUTION_FAILED", "분석 실행 중 오류가 발생했습니다.");
 		}
 	}
 }

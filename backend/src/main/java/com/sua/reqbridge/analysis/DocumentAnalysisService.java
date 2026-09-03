@@ -86,7 +86,7 @@ public class DocumentAnalysisService {
 			RequirementSnapshot requirement = created.stream()
 					.filter(item -> item.sequenceNo() == candidate.sequenceNo())
 					.findFirst()
-					.orElseThrow(() -> new IllegalArgumentException("Mock 결과와 생성 요구사항이 일치하지 않습니다."));
+					.orElseThrow(() -> new AiOutputInvalidException("Mock 결과와 생성 요구사항이 일치하지 않습니다."));
 			requirementIds.add(requirement.id());
 			if (!candidate.issues().isEmpty()) {
 				core.changeStatus(requirement.id(), requirement.contentVersion(), RequirementStatus.AMBIGUOUS);

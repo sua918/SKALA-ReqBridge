@@ -4,6 +4,8 @@ import java.net.URI;
 import java.time.Instant;
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -71,6 +73,10 @@ public class WorkflowController {
 	}
 
 	record AnswerRequest(String answerText, long expectedContentVersion) {
+		@JsonAnySetter
+		void rejectUnknown(String name, Object value) {
+			throw new IllegalArgumentException("정의되지 않은 필드입니다: " + name);
+		}
 	}
 
 	record Data<T>(T data) {
