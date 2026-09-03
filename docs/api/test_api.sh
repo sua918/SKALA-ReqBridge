@@ -161,16 +161,38 @@ else
 fi
 
 # ------------------------------------------------------------------------------
-# 3. 문서 분석 요청 (POST /api/documents/{documentId}/analyses)
+# 3. 문서 분석 작업 확인 (GET /api/documents/{documentId}/analyses)
 # ------------------------------------------------------------------------------
-log_step "3" "문서 모호성 분석 비동기 요청 (POST /api/documents/$DOC_ID/analyses)"
-http_call "POST" "/api/documents/$DOC_ID/analyses" ""
+log_step "3" "문서 자동 분석 작업 확인 (GET /api/documents/$DOC_ID/analyses)"
+# 문서 등록 시 이벤트 기반으로 비동기 자동 분석이 시작되므로, 분석 이력에서 작업 ID를 조회합니다.
+ANALYSIS_ID=""
+for i in {1..10}; do
+    http_call "GET" "/api/documents/$DOC_ID/analyses" ""
+    ANALYSIS_ID=$(json_get "$LAST_BODY" "data.items.0.id")
+    if [ -n "$ANALYSIS_ID" ]; then
+        log_success "자동 생성된 문서 분석 작업 확인 성공 (분석 ID: $ANALYSIS_ID)"
+        break
+    fi
+    sleep 0.5
+done
 
-if [ "$LAST_HTTP_CODE" = "202" ]; then
-    ANALYSIS_ID=$(json_get "$LAST_BODY" "data.id")
-    log_success "문서 분석 요청 접수 성공 (HTTP 202 Accepted, 분석 ID: $ANALYSIS_ID)"
-else
-    log_fail "문서 분석 요청 실패 (HTTP $LAST_HTTP_CODE)"
+if [ -z "$ANALYSIS_ID" ]; then
+    # 자동 분석 작업이 아직 없거나 비활성화된 경우 수동 요청
+    http_call "POST" "/api/documents/$DOC_ID/analyses" ""
+    if [ "$LAST_HTTP_CODE" = "202" ]; then
+        ANALYSIS_ID=$(json_get "$LAST_BODY" "data.id")
+        log_success "문서 분석 요청 접수 성공 (HTTP 202 Accepted, 분석 ID: $ANALYSIS_ID)"
+    elif [ "$LAST_HTTP_CODE" = "409" ]; then
+        http_call "GET" "/api/documents/$DOC_ID/analyses" ""
+        ANALYSIS_ID=$(json_get "$LAST_BODY" "data.items.0.id")
+        if [ -n "$ANALYSIS_ID" ]; then
+            log_success "기존 문서 분석 작업 확인 성공 (분석 ID: $ANALYSIS_ID)"
+        else
+            log_fail "문서 분석 작업 ID 확인 실패"
+        fi
+    else
+        log_fail "문서 분석 요청 실패 (HTTP $LAST_HTTP_CODE)"
+    fi
 fi
 
 # ------------------------------------------------------------------------------
