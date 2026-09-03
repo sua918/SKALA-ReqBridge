@@ -567,11 +567,9 @@ onMounted(() => {
 }
 .notice--stale { border: 1px solid var(--amber-bd); background: var(--amber-bg); color: var(--amber-tx); }
 
-/* 상태를 글자색에만 두면 카드 안으로 들어가야 무슨 상태인지 알 수 있다.
-   목록을 훑을 때는 판 전체가 색을 띠어야 눈이 먼저 잡는다. 다만 색은 아주 얕게 —
-   45%는 바탕이 「종이의 색조」로 읽히는 선이고, 그보다 진하면 판이 경고문이 된다.
-   확정본 카드가 이미 같은 방식으로 초록을 쓴다. */
-.issue--open { border-color: var(--amber-bd); background: color-mix(in srgb, var(--amber-bg) 32%, var(--bg-0)); }
+/* 미해결 카드에는 색을 주지 않는다. 검토하는 동안 대부분의 카드가 미해결이라
+   색을 주면 화면 전체가 물들고, 정작 「해결된 것」이 눈에 안 띈다.
+   해결된 카드만 옅은 초록으로 접어 둔다 — 훑을 때 색이 곧 「끝난 자리」다. */
 .issue--done { border-color: var(--green-bd); background: color-mix(in srgb, var(--green-bg) 32%, var(--bg-0)); }
 
 .issuehead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
