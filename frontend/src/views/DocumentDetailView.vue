@@ -258,7 +258,7 @@ onMounted(() => {
       </div>
       <!-- Preview 진입은 C(P2) 몫으로 비어 있던 자리다 (인계서 4.7). -->
       <RouterLink class="preview-link" :to="{ name: 'document-preview', params: { documentId: String(documentId) } }">
-        Preview 열기
+        미리보기
       </RouterLink>
     </header>
 

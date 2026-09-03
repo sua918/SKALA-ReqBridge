@@ -16,7 +16,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@primevue/themes": "^4.5.4",
     "axios": "^1.20.0",
+    "primevue": "^4.5.5",
     "vue": "^3.5.42",
     "vue-router": "^5.3.0"
   },
