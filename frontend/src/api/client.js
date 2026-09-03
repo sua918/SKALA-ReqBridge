@@ -43,6 +43,21 @@ export function unwrap(response) {
   return response.data?.data
 }
 
+/**
+ * 서버에 보내기 전 걸러낸 입력 오류를 Spec §7과 같은 형태로 만든다.
+ * 화면의 오류 처리 경로를 HTTP 400과 동일하게 유지하기 위함.
+ */
+export function validationError(fieldErrors, message = '요청 값을 확인해주세요.') {
+  const error = new Error(message)
+  error.apiError = {
+    code: ApiErrorCode.VALIDATION_ERROR,
+    message,
+    fieldErrors,
+    status: 400,
+  }
+  return Promise.reject(error)
+}
+
 /** 409 CONTENT_VERSION_CONFLICT 여부 (C workflow에서 사용). */
 export function isContentVersionConflict(error) {
   return error.apiError?.code === ApiErrorCode.CONTENT_VERSION_CONFLICT

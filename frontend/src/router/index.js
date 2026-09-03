@@ -28,7 +28,7 @@ const router = createRouter({
           meta: {
             breadcrumb: [
               { label: '프로젝트', to: { name: 'project-list' } },
-              { dynamic: 'projectId', prefix: '프로젝트 #' },
+              { dynamic: 'projectId', prefix: '프로젝트 #', resolve: 'project' },
               { label: '문서' },
             ],
           },
@@ -40,8 +40,9 @@ const router = createRouter({
           meta: {
             breadcrumb: [
               { label: '프로젝트', to: { name: 'project-list' } },
-              // 제목 API 연동 전: URL id 표시 (이후 GET /documents/{id})
-              { dynamic: 'documentId', prefix: '문서 #' },
+              // 문서 목록으로 돌아갈 projectId는 문서 응답에서 얻는다
+              { resolve: 'documentProject' },
+              { dynamic: 'documentId', prefix: '문서 #', resolve: 'document' },
             ],
           },
         },
@@ -52,8 +53,9 @@ const router = createRouter({
           meta: {
             breadcrumb: [
               { label: '프로젝트', to: { name: 'project-list' } },
-              // documentId는 GET /requirements/{id}로 채움
-              { label: '문서', skeleton: true },
+              { resolve: 'documentProject' },
+              // 문서명은 GET /requirements/{id}의 documentId로 조회한다
+              { resolve: 'requirementDocument' },
               { dynamic: 'requirementId', prefix: '요구사항 #' },
             ],
           },
@@ -65,9 +67,11 @@ const router = createRouter({
           meta: {
             breadcrumb: [
               { label: '프로젝트', to: { name: 'project-list' } },
+              { resolve: 'documentProject' },
               {
                 dynamic: 'documentId',
                 prefix: '문서 #',
+                resolve: 'document',
                 to: (route) => ({
                   name: 'document-detail',
                   params: { documentId: route.params.documentId },

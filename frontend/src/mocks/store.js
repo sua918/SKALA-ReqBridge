@@ -1,11 +1,14 @@
 import {
   AmbiguityType,
+  AnalysisFailureCode,
   AnalysisKind,
   AnalysisStatus,
+  DocumentSourceType,
   IssueStatus,
   RequirementStatus,
 } from '@/types/api'
 import {
+  DEMO_CONTENT,
   seedAnalysisCompleted,
   seedDocument,
   seedIssues,
@@ -15,6 +18,10 @@ import {
 
 function clone(value) {
   return structuredClone(value)
+}
+
+function timestamp() {
+  return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
 }
 
 /**
@@ -32,12 +39,15 @@ function createStore() {
     nextAnalysisId: 302,
     nextRequirementId: 402,
     nextIssueId: 503,
-    //분석 접수 후 완료까지의 지연 (Spec 5.9 PENDING → 6.1 polling 재현)
+    //접수한 작업의 종료 예정 시각과 결과 (Spec 5.9 PENDING → 6.1 polling 재현)
     pendingCompletions: {},
   }
 }
 
 const ANALYSIS_DELAY_MS = 1200
+
+/** mock-scenarios.md §7 — 입력에 이 표시가 있으면 작업을 실패로 끝낸다. */
+const FAILURE_MARKER = 'INVALID_OUTPUT'
 
 let store = createStore()
 
@@ -51,11 +61,25 @@ export function getMockStore() {
 
 export function listProjectsMock() {
   const items = [...store.projects].sort((a, b) => b.id - a.id)
-  return { items }
+  return { items: clone(items) }
+}
+
+/** 내부 조회는 원본을 쓰고, 화면으로 나가는 값은 clone한다 (Mock DB 오염 방지). */
+function findProject(projectId) {
+  return store.projects.find((p) => p.id === Number(projectId)) ?? null
+}
+
+function findDocument(documentId) {
+  return store.documents.find((d) => d.id === Number(documentId)) ?? null
+}
+
+function findAnalysis(analysisId) {
+  return store.analyses.find((a) => a.id === Number(analysisId)) ?? null
 }
 
 export function getProjectMock(projectId) {
-  return store.projects.find((p) => p.id === Number(projectId)) ?? null
+  const project = findProject(projectId)
+  return project ? clone(project) : null
 }
 
 export function createProjectMock({ name, description = null }) {
@@ -63,7 +87,7 @@ export function createProjectMock({ name, description = null }) {
     id: store.nextProjectId++,
     name,
     description,
-    createdAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    createdAt: timestamp(),
   }
   store.projects.push(project)
   return clone(project)
@@ -84,7 +108,8 @@ export function listDocumentsMock(projectId) {
 }
 
 export function getDocumentMock(documentId) {
-  return store.documents.find((d) => d.id === Number(documentId)) ?? null
+  const document = findDocument(documentId)
+  return document ? clone(document) : null
 }
 
 export function createTextDocumentMock(projectId, { title, sourceType, content }) {
@@ -94,7 +119,24 @@ export function createTextDocumentMock(projectId, { title, sourceType, content }
     title,
     sourceType,
     content,
-    createdAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    createdAt: timestamp(),
+  }
+  store.documents.push(document)
+  return clone(document)
+}
+
+/**
+ * PDF 텍스트 추출은 서버 몫이라 Mock에서는 재현하지 않는다.
+ * 파일명을 붙인 데모 원문을 content로 넣어 이후 분석 흐름만 이어지게 한다.
+ */
+export function createUploadedDocumentMock(projectId, { title, file }) {
+  const document = {
+    id: store.nextDocumentId++,
+    projectId: Number(projectId),
+    title,
+    sourceType: DocumentSourceType.FILE,
+    content: `${file.name}에서 추출한 텍스트 (Mock)\n${DEMO_CONTENT}`,
+    createdAt: timestamp(),
   }
   store.documents.push(document)
   return clone(document)
@@ -117,7 +159,9 @@ export function listRequirementsMock(documentId) {
 }
 
 export function getRequirementMock(requirementId) {
-  return store.requirements.find((r) => r.id === Number(requirementId)) ?? null
+  const requirement =
+    store.requirements.find((r) => r.id === Number(requirementId)) ?? null
+  return requirement ? clone(requirement) : null
 }
 
 export function listIssuesByRequirementMock(requirementId) {
@@ -136,11 +180,12 @@ export function listAnalysesMock(documentId, kind) {
 }
 
 export function getAnalysisMock(analysisId) {
-  const analysis = store.analyses.find((a) => a.id === Number(analysisId)) ?? null
-  if (analysis) {
-    settlePendingAnalysis(analysis)
+  const analysis = findAnalysis(analysisId)
+  if (!analysis) {
+    return null
   }
-  return analysis
+  settlePendingAnalysis(analysis)
+  return clone(analysis)
 }
 
 /** mock-scenarios.md §9 분류 기준의 축약 규칙. 표에 없는 표현은 문제로 보지 않는다. */
@@ -211,21 +256,36 @@ function extractRequirements(document, analysisId) {
   return { requirements, issues }
 }
 
-/** 접수한 작업을 지연 후 COMPLETED로 종료한다. 요구사항 저장은 완료 시점에 수행한다. */
+/**
+ * 접수한 작업을 지연 후 종료한다. 요구사항 저장은 완료 시점에 수행한다.
+ * 실패 작업은 부분 결과를 남기지 않는다 (mock-scenarios §7).
+ */
 function settlePendingAnalysis(analysis) {
-  const readyAt = store.pendingCompletions[analysis.id]
-  if (readyAt === undefined || Date.now() < readyAt) {
+  const pending = store.pendingCompletions[analysis.id]
+  if (pending === undefined || Date.now() < pending.readyAt) {
     return
   }
   delete store.pendingCompletions[analysis.id]
 
-  const document = getDocumentMock(analysis.documentId)
-  const { requirements, issues } = extractRequirements(document, analysis.id)
-  const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
-
-  analysis.status = AnalysisStatus.COMPLETED
+  const now = timestamp()
   analysis.startedAt = analysis.startedAt ?? now
   analysis.completedAt = now
+
+  if (pending.outcome === AnalysisStatus.FAILED) {
+    analysis.status = AnalysisStatus.FAILED
+    analysis.result = null
+    analysis.error = {
+      code: AnalysisFailureCode.AI_OUTPUT_INVALID,
+      message: '분석 결과 형식이 올바르지 않습니다.',
+    }
+    return
+  }
+
+  const document = findDocument(analysis.documentId)
+  const { requirements, issues } = extractRequirements(document, analysis.id)
+
+  analysis.status = AnalysisStatus.COMPLETED
+  analysis.error = null
   analysis.result = {
     requirementIds: requirements.map((r) => r.id),
     issueIds: issues.map((i) => i.id),
@@ -235,9 +295,16 @@ function settlePendingAnalysis(analysis) {
   }
 }
 
+function schedule(analysisId, outcome) {
+  store.pendingCompletions[analysisId] = {
+    readyAt: Date.now() + ANALYSIS_DELAY_MS,
+    outcome,
+  }
+}
+
 export function startDocumentAnalysisMock(documentId) {
   const docId = Number(documentId)
-  const document = getDocumentMock(docId)
+  const document = findDocument(docId)
   if (!document) {
     return { error: 'NOT_FOUND' }
   }
@@ -271,41 +338,53 @@ export function startDocumentAnalysisMock(documentId) {
     clarificationId: null,
     inputContentVersion: null,
     retryOfAnalysisId: null,
-    createdAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    createdAt: timestamp(),
     startedAt: null,
     completedAt: null,
     result: null,
     error: null,
   }
   store.analyses.push(analysis)
-  store.pendingCompletions[analysis.id] = Date.now() + ANALYSIS_DELAY_MS
+  schedule(
+    analysis.id,
+    document.content.includes(FAILURE_MARKER)
+      ? AnalysisStatus.FAILED
+      : AnalysisStatus.COMPLETED,
+  )
   return { analysis: clone(analysis) }
 }
 
 export function retryAnalysisMock(analysisId) {
-  const original = getAnalysisMock(analysisId)
+  const original = findAnalysis(analysisId)
   if (!original) {
     return { error: 'NOT_FOUND' }
   }
+  settlePendingAnalysis(original)
   if (original.status !== AnalysisStatus.FAILED) {
     return { error: 'NOT_RETRYABLE' }
   }
 
+  //같은 실패 작업의 재시도가 이미 있으면 새로 만들지 않는다 (Spec 5.12).
   const existing = store.analyses.find((a) => a.retryOfAnalysisId === original.id)
   if (existing) {
+    settlePendingAnalysis(existing)
     return { analysis: clone(existing) }
   }
 
+  //kind와 inputContentVersion은 원본을 유지한다 (mock-scenarios §7).
   const analysis = {
     ...clone(original),
     id: store.nextAnalysisId++,
-    status: AnalysisStatus.COMPLETED,
+    status: AnalysisStatus.PENDING,
     retryOfAnalysisId: original.id,
-    createdAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
-    startedAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
-    completedAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    createdAt: timestamp(),
+    startedAt: null,
+    completedAt: null,
+    result: null,
     error: null,
   }
   store.analyses.push(analysis)
-  return { analysis }
+  //Mock은 실패를 한 번 재현한 뒤 재시도 성공 경로를 보여준다.
+  schedule(analysis.id, AnalysisStatus.COMPLETED)
+  return { analysis: clone(analysis) }
 }

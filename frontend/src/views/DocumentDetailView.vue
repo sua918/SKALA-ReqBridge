@@ -7,14 +7,10 @@ import {
   startDocumentAnalysis,
 } from '@/api/analyses'
 import { getDocument } from '@/api/documents'
-import {
-  listMockIssuesByRequirement,
-  listRequirements,
-} from '@/api/requirements'
+import { listRequirements } from '@/api/requirements'
 import AnalysisFailureBanner from '@/components/common/AnalysisFailureBanner.vue'
 import ErrorMessage from '@/components/common/ErrorMessage.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
-import { resolveAmbiguityTypeLabel } from '@/components/common/ambiguityLabels.js'
 import { useActiveAnalysisLock } from '@/composables/useActiveAnalysisLock'
 import { useAnalysisPoller } from '@/composables/useAnalysisPoller'
 import { useApiError } from '@/composables/useApiError'
@@ -27,7 +23,6 @@ const documentId = computed(() => Number(route.params.documentId))
 const loading = ref(true)
 const document = ref(null)
 const requirements = ref([])
-const issuesByRequirementId = ref({})
 
 const { message, fieldErrors, hasError, captureError, clearError } = useApiError()
 const { activeAnalysis, isLocked, setActiveAnalysis, clearActiveAnalysis } =
@@ -76,21 +71,17 @@ const analyzeButtonLabel = computed(() => {
   return failedAnalysis.value ? '재시도 필요' : '분석 요청'
 })
 
-async function loadIssuesForRequirements(items) {
-  const map = {}
-  await Promise.all(
-    items.map(async (requirement) => {
-      const { items: issues } = await listMockIssuesByRequirement(requirement.id)
-      map[requirement.id] = issues
-    }),
-  )
-  issuesByRequirementId.value = map
-}
+/**
+ * 문제 상세(type·evidence)는 Spec 5.7 목록 응답에 없다.
+ * 이 화면은 분석 결과의 건수까지만 보여주고, 상세는 요구사항 화면의 workflow가 담당한다.
+ */
+const detectedIssueCount = computed(
+  () => activeAnalysis.value?.result?.issueIds?.length ?? 0,
+)
 
 async function loadRequirements() {
   const data = await listRequirements(documentId.value)
   requirements.value = data.items ?? []
-  await loadIssuesForRequirements(requirements.value)
 }
 
 async function restoreActiveAnalysis() {
@@ -169,19 +160,16 @@ async function onAnalyze() {
       },
     })
   } catch (error) {
-    if (error.apiError?.code === ApiErrorCode.DOCUMENT_ALREADY_ANALYZED) {
-      captureError(error)
-      await loadRequirements()
-      const data = await listDocumentAnalyses(documentId.value, AnalysisKind.DOCUMENT)
-      const completed = pickLatestAnalysis(
-        (data.items ?? []).filter((item) => item.status === AnalysisStatus.COMPLETED),
-      )
-      if (completed) {
-        setActiveAnalysis(completed)
-      }
-      return
-    }
     captureError(error)
+    //409는 이미 진행 중이거나 끝난 작업이 있다는 뜻이라 이력에서 복구한다 (Spec 6.3)
+    const code = error.apiError?.code
+    if (
+      code === ApiErrorCode.DOCUMENT_ALREADY_ANALYZED ||
+      code === ApiErrorCode.ANALYSIS_IN_PROGRESS
+    ) {
+      await restoreActiveAnalysis()
+      await loadRequirements()
+    }
   }
 }
 
@@ -276,6 +264,10 @@ onMounted(() => {
 
       <section class="panel">
         <h2>요구사항 목록</h2>
+        <p v-if="isAnalyzed" class="issue-summary">
+          이번 분석에서 확인된 불명확성 {{ detectedIssueCount }}건. 유형과 근거는 요구사항
+          화면에서 확인합니다.
+        </p>
         <p v-if="requirements.length === 0" class="empty">
           아직 추출된 요구사항이 없습니다. 분석을 실행해 주세요.
         </p>
@@ -295,22 +287,6 @@ onMounted(() => {
                 <StatusBadge kind="requirement" :value="requirement.status" />
               </div>
               <p class="req-text">{{ requirement.originalText }}</p>
-              <ul
-                v-if="(issuesByRequirementId[requirement.id] ?? []).length"
-                class="issue-list"
-              >
-                <li
-                  v-for="issue in issuesByRequirementId[requirement.id]"
-                  :key="issue.id"
-                  class="issue-item"
-                >
-                  <StatusBadge kind="issue" :value="issue.status" />
-                  <span class="issue-type">{{
-                    resolveAmbiguityTypeLabel(issue.type)
-                  }}</span>
-                  <span class="issue-evidence">{{ issue.evidence }}</span>
-                </li>
-              </ul>
               <span class="req-link">확인 · 답변으로 이동 →</span>
             </button>
           </li>
@@ -436,30 +412,10 @@ onMounted(() => {
   line-height: 1.5;
 }
 
-.issue-list {
-  margin: 0 0 10px;
-  padding: 0;
-  list-style: none;
-}
-
-.issue-item {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  margin-top: 6px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: #ffffff;
-  font-size: 0.8rem;
-}
-
-.issue-type {
-  font-weight: 600;
+.issue-summary {
+  margin: 0 0 12px;
   color: #b45309;
-}
-
-.issue-evidence {
-  color: #64748b;
+  font-size: 0.85rem;
 }
 
 .req-link {

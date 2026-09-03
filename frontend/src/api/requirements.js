@@ -11,7 +11,6 @@ import { notFound } from '@/api/mockError'
 import {
   getDocumentMock,
   getRequirementMock,
-  listIssuesByRequirementMock,
   listRequirementsMock,
 } from '@/mocks/store.js'
 
@@ -36,15 +35,4 @@ export async function getRequirement(requirementId) {
     return requirement
   }
   return unwrap(await api.get(`/requirements/${requirementId}`))
-}
-
-/**
- * Spec 목록 API에는 issues가 없다.
- * B Ambiguity 표시용 Mock fixture만 제공. (실BE·C는 workflow 사용)
- */
-export async function listMockIssuesByRequirement(requirementId) {
-  if (!useMock) {
-    return { items: [] }
-  }
-  return listIssuesByRequirementMock(requirementId)
 }

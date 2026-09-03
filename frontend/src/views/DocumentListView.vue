@@ -1,7 +1,11 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { createTextDocument, listDocuments } from '@/api/documents'
+import {
+  createTextDocument,
+  listDocuments,
+  uploadPdfDocument,
+} from '@/api/documents'
 import { DEMO_CONTENT } from '@/mocks/fixtures.js'
 import ErrorMessage from '@/components/common/ErrorMessage.vue'
 import { useApiError } from '@/composables/useApiError'
@@ -16,6 +20,10 @@ const documents = ref([])
 const title = ref('새 요구사항 문서')
 const content = ref(DEMO_CONTENT)
 const saving = ref(false)
+
+const uploadTitle = ref('')
+const uploadFile = ref(null)
+const uploading = ref(false)
 
 const { message, fieldErrors, hasError, captureError, clearError } = useApiError()
 
@@ -53,6 +61,29 @@ async function onCreate() {
     captureError(error)
   } finally {
     saving.value = false
+  }
+}
+
+function onFileChange(event) {
+  uploadFile.value = event.target.files?.[0] ?? null
+}
+
+async function onUpload() {
+  uploading.value = true
+  clearError()
+  try {
+    const document = await uploadPdfDocument(projectId.value, {
+      title: uploadTitle.value,
+      file: uploadFile.value,
+    })
+    uploadTitle.value = ''
+    uploadFile.value = null
+    await loadDocuments()
+    openDocument(document.id)
+  } catch (error) {
+    captureError(error)
+  } finally {
+    uploading.value = false
   }
 }
 
@@ -113,6 +144,30 @@ onMounted(() => {
           @click="onCreate"
         >
           {{ saving ? '등록 중…' : '문서 등록' }}
+        </button>
+      </section>
+
+      <section class="panel">
+        <h2>PDF 문서 등록</h2>
+        <p class="hint">
+          PDF 한 개, 최대 10MB. 원문은 서버가 추출합니다 (sourceType:
+          {{ DocumentSourceType.FILE }})
+        </p>
+        <label class="field">
+          <span>제목</span>
+          <input v-model="uploadTitle" type="text" maxlength="200" />
+        </label>
+        <label class="field">
+          <span>파일</span>
+          <input type="file" accept="application/pdf,.pdf" @change="onFileChange" />
+        </label>
+        <button
+          type="button"
+          class="btn-primary"
+          :disabled="uploading || uploadFile === null || uploadTitle.trim() === ''"
+          @click="onUpload"
+        >
+          {{ uploading ? '업로드 중…' : 'PDF 등록' }}
         </button>
       </section>
     </template>

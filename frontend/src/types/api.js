@@ -58,6 +58,17 @@ export const AmbiguityType = Object.freeze({
   EXCEPTION_MISSING: 'EXCEPTION_MISSING',
 })
 
+/**
+ * Spec §7 비동기 작업 실패 code (`Analysis.error.code`, HTTP는 200).
+ * 목록에 없는 코드도 message와 재시도 안내로 처리한다.
+ */
+export const AnalysisFailureCode = Object.freeze({
+  AI_OUTPUT_INVALID: 'AI_OUTPUT_INVALID',
+  ANALYSIS_EXECUTION_FAILED: 'ANALYSIS_EXECUTION_FAILED',
+  ANALYSIS_INTERRUPTED: 'ANALYSIS_INTERRUPTED',
+  CONTENT_VERSION_CONFLICT: 'CONTENT_VERSION_CONFLICT',
+})
+
 /** Spec §7 HTTP 오류 code */
 export const ApiErrorCode = Object.freeze({
   VALIDATION_ERROR: 'VALIDATION_ERROR',
