@@ -39,9 +39,22 @@ class WorkflowEntitiesTests {
 		revision.reject("최대치로 표현해주세요.");
 
 		assertThat(revision.getStatus()).isEqualTo(RevisionStatus.REJECTED);
+		assertThat(revision.getSource()).isEqualTo(com.sua.reqbridge.contract.RevisionSource.AI);
 		assertThat(revision.getInputContentVersion()).isEqualTo(4L);
 		assertThat(revision.getBasedOnClarificationIds())
 				.containsExactlyInAnyOrder(601L, 603L, 602L);
+		assertThat(revision.getBasedOnClarifications())
+				.allSatisfy(ref -> assertThat(ref.getRequirementId()).isEqualTo(401L));
 		assertThat(revision.getRejectionReason()).isEqualTo("최대치로 표현해주세요.");
+	}
+
+	@Test
+	void verifiesSchemaRequiredFieldsForAnalysisAndClarification() {
+		com.sua.reqbridge.analysis.Analysis analysis = com.sua.reqbridge.analysis.Analysis.pendingDocument(101L, "{\"test\":true}");
+		assertThat(analysis.getAdapterType()).isEqualTo(com.sua.reqbridge.contract.AnalysisAdapterType.MOCK);
+		assertThat(analysis.getSchemaVersion()).isEqualTo("1.0.0");
+
+		Clarification question = Clarification.waiting(401L, 501L, 1, "질문");
+		assertThat(question.getQuestionSource()).isEqualTo(com.sua.reqbridge.contract.ClarificationSource.AI);
 	}
 }

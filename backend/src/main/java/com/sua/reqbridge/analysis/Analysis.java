@@ -3,6 +3,10 @@ package com.sua.reqbridge.analysis;
 import java.time.Instant;
 import java.util.Objects;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+import com.sua.reqbridge.contract.AnalysisAdapterType;
 import com.sua.reqbridge.contract.AnalysisKind;
 import com.sua.reqbridge.contract.AnalysisStatus;
 
@@ -24,12 +28,22 @@ public class Analysis {
 	private Long id;
 
 	@Enumerated(EnumType.STRING)
-	@Column(nullable = false)
+	@JdbcTypeCode(SqlTypes.NAMED_ENUM)
+	@Column(nullable = false, columnDefinition = "analysis_kind")
 	private AnalysisKind kind;
 
 	@Enumerated(EnumType.STRING)
-	@Column(nullable = false)
+	@JdbcTypeCode(SqlTypes.NAMED_ENUM)
+	@Column(nullable = false, columnDefinition = "analysis_status")
 	private AnalysisStatus status;
+
+	@Enumerated(EnumType.STRING)
+	@JdbcTypeCode(SqlTypes.NAMED_ENUM)
+	@Column(name = "adapter_type", nullable = false, columnDefinition = "analysis_adapter_type")
+	private AnalysisAdapterType adapterType;
+
+	@Column(name = "schema_version", nullable = false, length = 50)
+	private String schemaVersion;
 
 	@Column(name = "document_id", nullable = false)
 	private Long documentId;
@@ -72,6 +86,13 @@ public class Analysis {
 
 	private Analysis(AnalysisKind kind, long documentId, Long requirementId,
 			Long clarificationId, Long inputContentVersion, String inputSnapshot) {
+		this(kind, documentId, requirementId, clarificationId, inputContentVersion,
+				inputSnapshot, AnalysisAdapterType.MOCK, "1.0.0");
+	}
+
+	private Analysis(AnalysisKind kind, long documentId, Long requirementId,
+			Long clarificationId, Long inputContentVersion, String inputSnapshot,
+			AnalysisAdapterType adapterType, String schemaVersion) {
 		this.kind = kind;
 		this.status = AnalysisStatus.PENDING;
 		this.documentId = documentId;
@@ -79,6 +100,8 @@ public class Analysis {
 		this.clarificationId = clarificationId;
 		this.inputContentVersion = inputContentVersion;
 		this.inputSnapshot = Objects.requireNonNull(inputSnapshot);
+		this.adapterType = Objects.requireNonNull(adapterType);
+		this.schemaVersion = Objects.requireNonNull(schemaVersion);
 		this.createdAt = Instant.now();
 	}
 
@@ -135,6 +158,14 @@ public class Analysis {
 
 	public AnalysisStatus getStatus() {
 		return status;
+	}
+
+	public AnalysisAdapterType getAdapterType() {
+		return adapterType;
+	}
+
+	public String getSchemaVersion() {
+		return schemaVersion;
 	}
 
 	public Long getDocumentId() {

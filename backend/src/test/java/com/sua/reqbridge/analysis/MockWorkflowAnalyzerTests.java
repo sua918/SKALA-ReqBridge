@@ -20,4 +20,28 @@ class MockWorkflowAnalyzerTests {
 
 		assertThat(file).isEqualTo(text);
 	}
+
+	@Test
+	void analyzesPdfContentWithLineBreaksAndIrregularWhitespace() {
+		MockWorkflowAnalyzer analyzer = new MockWorkflowAnalyzer();
+		String pdfContent = "   [시스템 요구사항 명세서] \r\n\r\n"
+				+ "시스템은   많은 사용자의  동시 상품 조회 요청에\n"
+				+ "빠르게 응답해야 한다.\r\n"
+				+ "부하 시험은 10분 동안 수행하며   성공 응답 비율은 99.9% 이상이어야 한다. \n\n";
+
+		var result = analyzer.analyze(new DocumentSnapshot(3, 1, "pdfDoc", pdfContent, "FILE"));
+
+		assertThat(result.requirements()).hasSize(1);
+		assertThat(result.requirements().getFirst().issues()).hasSize(2);
+	}
+
+	@Test
+	void throwsAiOutputInvalidForUnsupportedContent() {
+		MockWorkflowAnalyzer analyzer = new MockWorkflowAnalyzer();
+		DocumentSnapshot unsupported = new DocumentSnapshot(4, 1, "unknown", "완전히 다른 내용의 요구사항", "TEXT");
+
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> analyzer.analyze(unsupported))
+				.isInstanceOf(AiOutputInvalidException.class)
+				.hasMessageContaining("지원하지 않는 Mock 문서");
+	}
 }
