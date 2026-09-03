@@ -19,9 +19,13 @@ const label = computed(() => {
 </template>
 
 <style scoped>
+/* 알약과 테두리를 벗겼다.
+   이건 상태가 아니라 「어떤 종류의 불명확성인가」라는 분류다. 한 줄에 상태 배지와
+   나란히 놓이는데 둘 다 알약이면 어느 쪽이 지금 할 일을 말하는지 알 수 없고,
+   둘 다 눌러야 하는 것처럼 보인다. 배지는 상태 하나만 쓰고, 분류는 글자로 둔다. */
 .amb {
-  display: inline-flex; align-items: center; padding: 3px 9px 4px; border-radius: 999px;
-  background: var(--bg-50); border: 1px solid var(--gray-bd); color: var(--gray-tx);
-  font-size: var(--fs-micro); letter-spacing: .02em; white-space: nowrap;
+  display: inline-flex; align-items: center;
+  color: var(--fg-500);
+  font-size: var(--fs-micro); letter-spacing: .01em; white-space: nowrap;
 }
 </style>

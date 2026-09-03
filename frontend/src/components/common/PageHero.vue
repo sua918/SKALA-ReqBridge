@@ -72,10 +72,12 @@ defineProps({
    본문과 같은 색이라 「제목」이 아니라 「굵은 문장」으로 읽힌다. */
 .title {
   margin: 0;
-  font-size: clamp(22px, 2.2vw, 30px);
-  font-weight: 750;
-  letter-spacing: -.022em;
-  line-height: 1.25;
+  /* 크기·굵기·자간은 전부 타입 스케일에서 가져온다. 여기에 값을 박아 두면
+     스케일을 조정해도 이 제목만 따라오지 않는다. */
+  font-size: var(--fs-display);
+  font-weight: var(--fw-display);
+  letter-spacing: var(--tr-display);
+  line-height: var(--lh-display);
   color: var(--accent-700);
   word-break: keep-all;
 }

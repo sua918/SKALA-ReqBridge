@@ -32,22 +32,18 @@ const tone = computed(() => resolveStatusTone(props.kind, props.value))
 </template>
 
 <style scoped>
-/* 색·크기·모서리를 전부 디자인 토큰에서 가져온다.
-   예전에는 Tailwind 계열 색(#fef3c7 등)을 직접 박아 두어, 같은 화면에서
-   배지의 빨강(#fee2e2)과 거절 사유 판의 빨강(--red-bg #FFE6E4)이 미묘하게
-   달랐다. 한 화면에 색 체계가 두 벌 있으면 어느 쪽이 기준인지 알 수 없다.
+/* 색·크기를 전부 디자인 토큰에서 가져온다. props와 tone 이름
+   (neutral/info/warn/success/danger/purple)은 그대로다.
 
-   props와 tone 이름(neutral/info/warn/success/danger)은 그대로다. */
+   알약을 벗겼다. 배지에 바탕과 테두리를 주면 한 줄에 둘만 놓여도 「누를 수 있는 것」이
+   여럿인 화면처럼 보인다. 상태는 누르는 것이 아니다.
+   상태는 글자색으로 말하고, 색을 눈이 먼저 잡도록 앞에 작은 점 하나만 둔다.
+   회색 「추출 완료」도 점이 있으면 흰 카드에서 묻히지 않는다. */
 .status-badge {
   display: inline-flex;
   align-items: center;
-  padding: 3px 9px 4px;
-  /* 검은 윤곽 1px. 색만으로는 회색 「추출됨」이 흰 카드에 묻히고, 배지 하나하나가
-     「물건」으로 안 잡힌다. 굵기를 올리면(1.5·2px) 배지가 버튼처럼 보여 못 누르는
-     것을 누를 것처럼 만든다. 1px이면 윤곽은 서고 무게는 안 는다.
-     이 화면은 이미 기둥 구분선과 제목이 검정이라 윤곽선이 이물질이 아니다. */
-  border: 1px solid var(--fg-950);
-  border-radius: 3px;
+  gap: 6px;
+  padding: 2px 0;
   font-family: var(--font-body);
   font-size: var(--fs-xs);
   font-weight: 600;
@@ -56,40 +52,31 @@ const tone = computed(() => resolveStatusTone(props.kind, props.value))
   white-space: nowrap;
 }
 
-/* 추출됨 · 대기 — 아직 아무 일도 일어나지 않은 상태 */
-.status-badge--neutral {
-  color: var(--gray-tx);
-  background: var(--gray-bg);
+/* 점은 글자색을 그대로 쓴다 — 색이 두 벌로 갈리지 않는다. */
+.status-badge::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
-/* 확인 중 · 검토 중 · 처리 중 · 답변됨 · 제안 — 진행 중 */
-.status-badge--info {
-  color: var(--blue-tx);
-  background: var(--blue-bg);
-}
+/* 추출 완료 · 대기 — 아직 아무 일도 일어나지 않은 상태 */
+.status-badge--neutral { color: var(--gray-tx); }
 
-/* 검토 중 — 수정안이 나와 사람의 판단을 기다리는 단계.
-   같은 「진행 중」이지만 확인 중(고객 답변 대기)과는 할 일이 다르다. */
-.status-badge--purple {
-  color: var(--purple-tx);
-  background: var(--purple-bg);
-}
+/* 분석 중 · 답변됨 — 기계가 일하는 중이거나 사람의 입력이 들어온 뒤 */
+.status-badge--info { color: var(--blue-tx); }
 
-/* 불명확 · 답변 대기 · 미해결 — 사람의 손이 필요한 상태 */
-.status-badge--warn {
-  color: var(--amber-tx);
-  background: var(--amber-bg);
-}
+/* 수정안 승인 대기 — 수정안이 나와 사람의 판단을 기다리는 단계.
+   같은 「진행 중」이지만 보완 답변 필요(고객 답변 대기)와는 할 일이 다르다. */
+.status-badge--purple { color: var(--purple-tx); }
 
-/* 확정 · 완료 · 해결 · 승인 — 끝난 상태 */
-.status-badge--success {
-  color: var(--green-tx);
-  background: var(--green-bg);
-}
+/* 불명확성 발견 · 답변 대기 · 미해결 — 사람의 손이 필요한 상태 */
+.status-badge--warn { color: var(--amber-so); }
+
+/* 확정 완료 · 완료 · 해결 · 승인 — 끝난 상태 */
+.status-badge--success { color: var(--green-tx); }
 
 /* 실패 · 거절 */
-.status-badge--danger {
-  color: var(--red-tx);
-  background: var(--red-bg);
-}
+.status-badge--danger { color: var(--red-tx); }
 </style>

@@ -395,7 +395,7 @@ onMounted(() => {
             <StatusBadge kind="revision" value="APPROVED" />
           </div>
           <p class="source">{{ requirement.confirmedText }}</p>
-          <p class="mi hint">승인한 수정안 #{{ requirement.approvedRevisionId }}의 본문입니다.</p>
+          <p class="mi hint">승인된 수정안의 본문입니다.</p>
         </div>
 
         <div class="card pad quiet journey">
@@ -428,7 +428,11 @@ onMounted(() => {
         />
 
         <!-- 문제 · 질문 -->
-        <div v-for="(group, i) in issueGroups" :key="group.issue.id" class="card pad issue">
+        <div
+          v-for="(group, i) in issueGroups" :key="group.issue.id"
+          class="card pad issue"
+          :class="group.issue.status === IssueStatus.RESOLVED ? 'issue--done' : 'issue--open'"
+        >
           <div class="issuehead">
             <!-- 저장번호가 아니라 이 요구사항 안에서 몇 번째 문제인지를 센다.
                  601·602 같은 수는 「602번째 문제」로 읽혀 규모를 잘못 전한다
@@ -562,6 +566,13 @@ onMounted(() => {
   word-break: keep-all;
 }
 .notice--stale { border: 1px solid var(--amber-bd); background: var(--amber-bg); color: var(--amber-tx); }
+
+/* 상태를 글자색에만 두면 카드 안으로 들어가야 무슨 상태인지 알 수 있다.
+   목록을 훑을 때는 판 전체가 색을 띠어야 눈이 먼저 잡는다. 다만 색은 아주 얕게 —
+   45%는 바탕이 「종이의 색조」로 읽히는 선이고, 그보다 진하면 판이 경고문이 된다.
+   확정본 카드가 이미 같은 방식으로 초록을 쓴다. */
+.issue--open { border-color: var(--amber-bd); background: color-mix(in srgb, var(--amber-bg) 32%, var(--bg-0)); }
+.issue--done { border-color: var(--green-bd); background: color-mix(in srgb, var(--green-bg) 32%, var(--bg-0)); }
 
 .issuehead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
 .inum { font-size: 15px; color: var(--fg-400); }
