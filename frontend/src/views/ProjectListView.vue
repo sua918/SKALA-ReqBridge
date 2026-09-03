@@ -132,7 +132,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <form class="card pad form col-form stickycol" @submit.prevent="onCreate">
+      <form class="card pad form col-form" @submit.prevent="onCreate">
         <div class="cardhead"><span class="eb">새 프로젝트</span></div>
 
         <label class="lbl">
@@ -164,9 +164,12 @@ onMounted(() => {
 .col-form { grid-column: span 4; }
 
 /* 좁아지면 나란히 두기엔 이름이 잘린다. 폼을 아래로 내려 목록이 폭을 다 쓰게 한다. */
-@media (max-width: 1240px) {
+/* 접히는 기준을 1240 -> 900px로 내렸다. 1240은 노트북 폭(1280~1440)에서도 자주
+   걸려, 나란히 놓을 자리가 충분한데도 폼이 목록 아래로 떨어졌다.
+   4칸이 손가락만 해지는 900px 아래에서만 쌓는다. */
+@media (max-width: 900px) {
   .col-list { grid-column: span 12; }
-  .col-form { grid-column: span 12; position: static; margin-top: 28px; }
+  .col-form { grid-column: span 12; position: static; margin-top: 20px; }
 }
 
 /* 좌우 여백과 마지막 줄 밑줄은 .card.list가 맡는다. */
@@ -179,7 +182,7 @@ onMounted(() => {
   gap: 16px;
   align-items: center;
   width: 100%;
-  padding: 15px 0 16px;
+  padding: 18px 0 19px;
   border-left: 0;
   border-right: 0;
   border-top: 0;
@@ -202,8 +205,8 @@ onMounted(() => {
    이름 100자·설명 2000자를 다 펼치면 행 하나가 925px이 돼 한 화면에 한 건도 안 들어온다.
    이름은 한 줄, 설명은 두 줄로 자르고 넘치면 말줄임한다. 전문은 들어가서 본다. */
 .pname {
-  font-size: 17px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 650;
   transition: color .25s var(--ease);
   white-space: nowrap;
   overflow: hidden;
@@ -224,7 +227,10 @@ onMounted(() => {
 /* 행의 동작 문구. 이름이 아무리 길어도 이 칸은 줄지 않아야 눌러야 할 곳이 흔들리지 않는다. */
 .act {
   display: inline-flex; align-items: center; gap: 6px;
-  white-space: nowrap; color: var(--fg-400);
+  white-space: nowrap;
+  /* 행이 하는 일은 「누를 수 있는 것」으로 보여야 한다. 회색 400은 설명글과 같은
+     무게라 눌러도 되는지 알 수 없었다. 브랜드 남색에 굵기를 준다. */
+  font-size: var(--fs-sm); font-weight: 700; color: var(--accent-700);
   transition: color .25s var(--ease);
 }
 .arrow { transition: transform .3s var(--ease); }

@@ -106,14 +106,17 @@
      sticky 기둥이 이 값을 알아야 바 아래에 정확히 붙는다. */
   --header-h:60px;
   --sticky-top:calc(var(--header-h) + 18px);
-  --maxw:1360px;
-  --gutter:40px;
+  /* 팀 시안 수치. 1360px는 한 줄이 너무 길어 목록을 훑을 때 시선이 오른쪽 끝까지
+     갔다 돌아와야 했다. 좌우 여백도 40 -> 24px로 줄여 본문이 화면을 더 쓴다. */
+  --maxw:1200px;
+  --gutter:24px;
   --radius-card:8px;
-  --pad-card:19px;
+  /* 카드 안쪽 여백. 19px은 어중간해서 카드 안의 줄들이 테두리에 붙어 보였다. */
+  --pad-card:24px;
   --radius-hero:32px;
 }
 
-@media (max-width: 900px) { :root { --gutter: 22px; } }
+@media (max-width: 900px) { :root { --gutter: 18px; } }
 
 * { box-sizing: border-box; }
 
@@ -216,7 +219,7 @@ button { font: inherit; }
    .pad를 쓰면 행이 안쪽으로 19px 밀려, hover 배경이 「카드 안에 뜬 또 하나의 사각형」처럼
    보인다. 한 줄이 통째로 누를 수 있는 것으로 읽히려면 행이 테두리까지 닿아야 한다.
    그래서 여백을 카드가 아니라 머리말과 각 행이 따로 갖는다. */
-.card.list > .eb:first-child { margin: 0; padding: 14px var(--pad-card) 13px; }
+.card.list > .eb:first-child { margin: 0; padding: 16px var(--pad-card); }
 .card.list .row { padding-left: var(--pad-card); padding-right: var(--pad-card); }
 /* 마지막 행의 밑줄은 카드 테두리와 겹쳐 두 줄로 보인다. */
 .card.list .row:last-child { border-bottom: 0; }
@@ -472,7 +475,7 @@ button { font: inherit; }
 .grid12 {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 32px;
+  gap: 20px;
   align-items: start;
 }
 
@@ -490,7 +493,10 @@ button { font: inherit; }
 
    위치 계산: gap 48px × 11 = 528px가 고정폭이므로 한 칼럼은 (100% - 528px)/12.
    N칼럼 뒤 경계 = N칼럼 + (N-0.5)개 gap. 2px 선을 그 위에 얹으려면 1px 당긴다. */
-.grid12.split { position: relative; gap: 48px; }
+/* 기둥 사이 간격을 48 -> 24px로 좁혀 목록 화면(20px)과 같은 리듬을 쓴다.
+   구분선 위치는 간격에서 나오므로 아래 calc도 함께 바뀐다:
+   왼쪽 = (남는 폭 / 12) * 기둥수 + 간격 * (기둥수 - 0.5). */
+.grid12.split { position: relative; gap: 24px; }
 .grid12.split::before {
   content: '';
   position: absolute; top: 4px; bottom: 4px;
@@ -509,8 +515,8 @@ button { font: inherit; }
     rgba(2, 1, 0, 0) 100%);
   pointer-events: none;
 }
-.grid12.split.at-4::before { left: calc((100% - 528px) / 12 * 4 + 167px); }
-.grid12.split.at-8::before { left: calc((100% - 528px) / 12 * 8 + 359px); }
+.grid12.split.at-4::before { left: calc((100% - 264px) / 12 * 4 + 84px); }
+.grid12.split.at-8::before { left: calc((100% - 264px) / 12 * 8 + 180px); }
 
 /* 4/8 두 기둥은 이 화면들에서 쌓이지 않으므로 괘선도 계속 뜻이 있다.
    다만 폭이 아주 좁으면 왼쪽 기둥이 손가락만 해져 선이 압박으로만 남는다. */
@@ -521,7 +527,7 @@ button { font: inherit; }
 .page {
   max-width: var(--maxw);
   margin-inline: auto;
-  padding: 26px var(--gutter) 60px;
+  padding: 0 var(--gutter) 48px;
   position: relative;
 }
 

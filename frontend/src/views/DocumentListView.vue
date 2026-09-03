@@ -206,7 +206,10 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="col-form stickycol">
+      <!-- 등록 폼은 따라다니지 않는다. 폼이 화면에 붙어 스크롤을 따라오면 목록을
+           훑는 내내 시야 절반을 차지하고, 폼이 길어지면 안에서 또 스크롤이 생긴다.
+           원문·조회 기준처럼 「보면서 작업하는 판」만 따라오게 둔다. -->
+      <div class="col-form">
         <!-- 시연의 시작점은 PDF 업로드다. 직접 입력이 먼저 보이면 준비한 문서를 두고
              본문을 붙여넣는 길로 눈이 먼저 간다 (프론트엔드-추가-요청사항 3.3). -->
         <form class="card pad" @submit.prevent="onUpload">
@@ -297,9 +300,12 @@ onMounted(() => {
 .col-form { grid-column: span 4; }
 
 /* 좁아지면 제목이 잘려 무슨 문서인지 안 읽힌다. 폼을 아래로 내려 목록이 폭을 다 쓰게 한다. */
-@media (max-width: 1240px) {
+/* 접히는 기준을 1240 -> 900px로 내렸다. 1240은 노트북 폭(1280~1440)에서도 자주
+   걸려, 나란히 놓을 자리가 충분한데도 폼이 목록 아래로 떨어졌다.
+   4칸이 손가락만 해지는 900px 아래에서만 쌓는다. */
+@media (max-width: 900px) {
   .col-list { grid-column: span 12; }
-  .col-form { grid-column: span 12; position: static; margin-top: 28px; }
+  .col-form { grid-column: span 12; position: static; margin-top: 20px; }
 }
 
 /* PrimeVue FileUpload는 자기 테마 색(에메랄드)을 들고 온다. 이 화면에서 초록은
@@ -358,7 +364,10 @@ onMounted(() => {
 /* 행의 동작 문구. 제목이 길어져도 이 칸은 줄지 않는다. */
 .act {
   display: inline-flex; align-items: center; gap: 6px;
-  white-space: nowrap; color: var(--fg-400);
+  white-space: nowrap;
+  /* 행이 하는 일은 「누를 수 있는 것」으로 보여야 한다. 회색 400은 설명글과 같은
+     무게라 눌러도 되는지 알 수 없었다. 브랜드 남색에 굵기를 준다. */
+  font-size: var(--fs-sm); font-weight: 700; color: var(--accent-700);
   transition: color .25s var(--ease);
 }
 

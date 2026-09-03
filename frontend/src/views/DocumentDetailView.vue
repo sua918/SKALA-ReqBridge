@@ -413,7 +413,11 @@ onMounted(() => {
 /* 행의 동작 문구는 줄 끝으로 민다 — 배지·버전과 붙어 있으면 상태의 일부로 읽힌다. */
 .act {
   display: inline-flex; align-items: center; gap: 6px;
-  margin-left: auto; white-space: nowrap; color: var(--fg-400);
+  margin-left: auto;
+  white-space: nowrap;
+  /* 행이 하는 일은 「누를 수 있는 것」으로 보여야 한다. 회색 400은 설명글과 같은
+     무게라 눌러도 되는지 알 수 없었다. 브랜드 남색에 굵기를 준다. */
+  font-size: var(--fs-sm); font-weight: 700; color: var(--accent-700);
   transition: color .25s var(--ease);
 }
 /* 답변이 필요한 행만 동작 문구에 색을 준다. 왼쪽 색띠 대신 「할 일」 자체를 짚는다. */
