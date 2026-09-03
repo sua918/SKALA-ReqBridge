@@ -121,6 +121,21 @@ public class Analysis {
 				null, inputContentVersion, inputSnapshot);
 	}
 
+	public static Analysis retry(Analysis failedAnalysis) {
+		if (failedAnalysis == null) {
+			throw new IllegalArgumentException("재시도할 대상 분석 작업이 필요합니다.");
+		}
+		if (failedAnalysis.getStatus() != AnalysisStatus.FAILED) {
+			throw new IllegalStateException("FAILED 작업만 재시도할 수 있습니다.");
+		}
+		Analysis retried = new Analysis(failedAnalysis.getKind(), failedAnalysis.getDocumentId(),
+				failedAnalysis.getRequirementId(), failedAnalysis.getClarificationId(),
+				failedAnalysis.getInputContentVersion(), failedAnalysis.getInputSnapshot(),
+				failedAnalysis.getAdapterType(), failedAnalysis.getSchemaVersion());
+		retried.retryOfAnalysisId = failedAnalysis.getId();
+		return retried;
+	}
+
 	public void start(Instant startedAt) {
 		if (status != AnalysisStatus.PENDING) {
 			throw new IllegalStateException("PENDING 작업만 시작할 수 있습니다.");

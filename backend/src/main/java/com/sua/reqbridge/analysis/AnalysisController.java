@@ -50,6 +50,19 @@ public class AnalysisController {
 		return new Data<>(view(service.get(analysisId)));
 	}
 
+	@PostMapping("/analyses/{analysisId}/retries")
+	public ResponseEntity<Data<AnalysisView>> retry(@PathVariable long analysisId) {
+		Analysis analysis = service.retry(analysisId);
+		Data<AnalysisView> body = new Data<>(view(analysis));
+		if (analysis.getStatus() == AnalysisStatus.PENDING
+				|| analysis.getStatus() == AnalysisStatus.PROCESSING) {
+			return ResponseEntity.accepted()
+					.location(URI.create("/api/analyses/" + analysis.getId()))
+					.body(body);
+		}
+		return ResponseEntity.ok(body);
+	}
+
 	private AnalysisView view(Analysis analysis) {
 		Object result = analysis.getResult() == null ? null : json.readTree(analysis.getResult());
 		Failure error = analysis.getErrorCode() == null

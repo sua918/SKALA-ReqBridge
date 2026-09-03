@@ -23,6 +23,9 @@ import com.sua.reqbridge.contract.StateConflictException;
 
 import tools.jackson.databind.ObjectMapper;
 
+import com.sua.reqbridge.clarification.AnswerAnalysisRequested;
+import com.sua.reqbridge.revision.RevisionAnalysisRequested;
+
 public class DocumentAnalysisService {
 
 	private static final List<AnalysisStatus> ACTIVE = List.of(
@@ -125,6 +128,49 @@ public class DocumentAnalysisService {
 		return kind == null
 				? analyses.findByDocumentIdOrderByIdDesc(documentId)
 				: analyses.findByDocumentIdAndKindOrderByIdDesc(documentId, kind);
+	}
+
+	@Transactional
+	public Analysis retry(long analysisId) {
+		Analysis original = get(analysisId);
+		if (original.getStatus() != AnalysisStatus.FAILED) {
+			throw new StateConflictException("ANALYSIS_NOT_RETRYABLE", "실패한 작업만 재시도할 수 있습니다.");
+		}
+		var existingRetry = analyses.findFirstByRetryOfAnalysisIdOrderByIdDesc(analysisId);
+		if (existingRetry.isPresent()) {
+			return existingRetry.get();
+		}
+
+		if (original.getRequirementId() != null) {
+			RequirementSnapshot requirement = core.lockRequirement(original.getRequirementId());
+			if (requirement.status() == RequirementStatus.CONFIRMED) {
+				throw new StateConflictException("REQUIREMENT_CONFIRMED", "확정된 요구사항의 작업은 재시도할 수 없습니다.");
+			}
+			if (analyses.existsByRequirementIdAndStatusIn(requirement.id(), ACTIVE)) {
+				throw new StateConflictException("ANALYSIS_IN_PROGRESS", "요구사항 분석이 진행 중입니다.");
+			}
+			if (original.getInputContentVersion() != null
+					&& requirement.contentVersion() != original.getInputContentVersion()) {
+				throw new StateConflictException("CONTENT_VERSION_CONFLICT", "요구사항 버전이 일치하지 않습니다.");
+			}
+		}
+		else {
+			if (analyses.existsByDocumentIdAndKindAndStatusIn(original.getDocumentId(), AnalysisKind.DOCUMENT, ACTIVE)) {
+				throw new StateConflictException("ANALYSIS_IN_PROGRESS", "문서 분석이 진행 중입니다.");
+			}
+			if (analyses.existsByDocumentIdAndKindAndStatus(
+					original.getDocumentId(), AnalysisKind.DOCUMENT, AnalysisStatus.COMPLETED)) {
+				throw new StateConflictException("DOCUMENT_ALREADY_ANALYZED", "이미 분석을 완료한 문서입니다.");
+			}
+		}
+
+		Analysis retryAnalysis = analyses.save(Analysis.retry(original));
+		switch (retryAnalysis.getKind()) {
+			case DOCUMENT -> events.publishEvent(new DocumentAnalysisRequested(retryAnalysis.getId()));
+			case ANSWER -> events.publishEvent(new AnswerAnalysisRequested(retryAnalysis.getId()));
+			case REVISION -> events.publishEvent(new RevisionAnalysisRequested(retryAnalysis.getId()));
+		}
+		return retryAnalysis;
 	}
 
 	record DocumentInput(long documentId, String sourceType, String content) {
