@@ -3,13 +3,20 @@ import {
   AnalysisFailureCode,
   AnalysisKind,
   AnalysisStatus,
+  ClarificationStatus,
   DocumentSourceType,
   IssueStatus,
   RequirementStatus,
+  ReviewDecision,
+  RevisionStatus,
 } from '@/types/api'
 import {
+  ANSWER_ASSESSMENTS,
   DEMO_CONTENT,
+  REVISION_TEXTS,
+  UNSUPPORTED_ASSESSMENT,
   seedAnalysisCompleted,
+  seedClarifications,
   seedDocument,
   seedIssues,
   seedProject,
@@ -34,11 +41,16 @@ function createStore() {
     analyses: [clone(seedAnalysisCompleted)],
     requirements: [clone(seedRequirement)],
     issues: clone(seedIssues),
+    clarifications: clone(seedClarifications),
+    revisions: [],
     nextProjectId: 2,
     nextDocumentId: 102,
     nextAnalysisId: 302,
     nextRequirementId: 402,
     nextIssueId: 503,
+    //고정 ID는 mock-scenarios.md §1을 따른다 (질문 603부터, 수정안 701부터)
+    nextClarificationId: 603,
+    nextRevisionId: 701,
     //접수한 작업의 종료 예정 시각과 결과 (Spec 5.9 PENDING → 6.1 polling 재현)
     pendingCompletions: {},
   }
@@ -281,6 +293,16 @@ function settlePendingAnalysis(analysis) {
     return
   }
 
+  //작업 종류마다 완료 결과가 다르다. DOCUMENT는 B, ANSWER·REVISION은 workflow(C).
+  if (analysis.kind === AnalysisKind.ANSWER) {
+    settleAnswerAnalysis(analysis)
+    return
+  }
+  if (analysis.kind === AnalysisKind.REVISION) {
+    settleRevisionAnalysis(analysis)
+    return
+  }
+
   const document = findDocument(analysis.documentId)
   const { requirements, issues } = extractRequirements(document, analysis.id)
 
@@ -387,4 +409,435 @@ export function retryAnalysisMock(analysisId) {
   //Mock은 실패를 한 번 재현한 뒤 재시도 성공 경로를 보여준다.
   schedule(analysis.id, AnalysisStatus.COMPLETED)
   return { analysis: clone(analysis) }
+}
+
+
+/* ---------------------------------------------------------------------------
+   Workflow Mock (Spec 5.13~5.16 · mock-scenarios.md 3~6절) — C 담당.
+   B의 문서 분석 경로는 그대로 두고, 여기서 ANSWER·REVISION만 다룬다.
+   --------------------------------------------------------------------------- */
+
+/**
+ * Spec §2.1이 고정한 앞뒤 공백 집합. `\s`로 대신하지 않는다 —
+ * JS의 `\s`는 U+FEFF를 포함하고 U+0085를 빼는 등 명세와 집합이 다르다.
+ * 서버와 같은 집합을 써야 「같은 답변」 판정이 양쪽에서 일치한다.
+ */
+const TRIM_CLASS =
+  '[\u0009-\u000D\u0020\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]'
+const TRIM_RE = new RegExp(`^${TRIM_CLASS}+|${TRIM_CLASS}+$`, 'g')
+
+/** 답변·거절 사유: CRLF→LF 후 앞뒤 공백 제거. 저장과 동일성 비교에 같은 값을 쓴다. */
+export function normalizeText(value) {
+  return String(value ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(TRIM_RE, '')
+}
+
+/** 길이는 Unicode 코드 포인트 기준 (Spec §2.1). `.length`는 이모지를 2로 센다. */
+export function codePointLength(value) {
+  return [...String(value ?? '')].length
+}
+
+function findClarification(clarificationId) {
+  return store.clarifications.find((c) => c.id === Number(clarificationId)) ?? null
+}
+
+function findRevision(revisionId) {
+  return store.revisions.find((r) => r.id === Number(revisionId)) ?? null
+}
+
+function findRequirement(requirementId) {
+  return store.requirements.find((r) => r.id === Number(requirementId)) ?? null
+}
+
+function issuesOf(requirementId) {
+  return store.issues
+    .filter((i) => i.requirementId === Number(requirementId))
+    .sort((a, b) => a.id - b.id)
+}
+
+/** issueId -> roundNo 오름차순 (Spec 5.13 정렬 계약). */
+function clarificationsOf(requirementId) {
+  return store.clarifications
+    .filter((c) => c.requirementId === Number(requirementId))
+    .sort((a, b) => a.issueId - b.issueId || a.roundNo - b.roundNo)
+}
+
+/** revisionNo 내림차순 (Spec 5.13). */
+function revisionsOf(requirementId) {
+  return store.revisions
+    .filter((r) => r.requirementId === Number(requirementId))
+    .sort((a, b) => b.revisionNo - a.revisionNo)
+}
+
+/**
+ * 같은 요구사항의 활성 ANSWER/REVISION 작업.
+ * DOCUMENT 작업은 문서 단위라 여기 포함하지 않는다 (Spec 6.3).
+ */
+function activeWorkflowAnalysis(requirementId) {
+  return (
+    store.analyses.find(
+      (a) =>
+        a.requirementId === Number(requirementId) &&
+        (a.kind === AnalysisKind.ANSWER || a.kind === AnalysisKind.REVISION) &&
+        (a.status === AnalysisStatus.PENDING ||
+          a.status === AnalysisStatus.PROCESSING),
+    ) ?? null
+  )
+}
+
+/** 답변이 들어온 질문들. 수정안의 근거 집합이 된다 (Spec 5.16 basedOnClarificationIds). */
+function basisClarificationIds(requirementId) {
+  return clarificationsOf(requirementId)
+    .filter((c) => c.answerText !== null)
+    .map((c) => c.id)
+}
+
+function createWorkflowAnalysis(requirement, kind, clarificationId) {
+  const analysis = {
+    id: store.nextAnalysisId++,
+    kind,
+    status: AnalysisStatus.PENDING,
+    documentId: requirement.documentId,
+    requirementId: requirement.id,
+    clarificationId: clarificationId ?? null,
+    inputContentVersion: requirement.contentVersion,
+    retryOfAnalysisId: null,
+    createdAt: timestamp(),
+    startedAt: null,
+    completedAt: null,
+    result: null,
+    error: null,
+  }
+  store.analyses.push(analysis)
+  return analysis
+}
+
+const EMPTY_RESULT = {
+  requirementIds: [],
+  issueIds: [],
+  clarificationIds: [],
+  revisionIds: [],
+  assessment: null,
+}
+
+/** 모든 문제가 해결됐을 때 붙일 수정안을 만든다 (mock-scenarios 5·6절). */
+function proposeRevision(requirement, text) {
+  const revisionNo =
+    revisionsOf(requirement.id).reduce((max, r) => Math.max(max, r.revisionNo), 0) + 1
+  const revision = {
+    id: store.nextRevisionId++,
+    requirementId: requirement.id,
+    revisionNo,
+    text,
+    status: RevisionStatus.PROPOSED,
+    inputContentVersion: requirement.contentVersion,
+    basedOnClarificationIds: basisClarificationIds(requirement.id),
+    rejectionReason: null,
+    //Acceptance Criteria는 P3라 항상 빈 배열 (Spec 1절).
+    acceptanceCriteria: [],
+  }
+  store.revisions.push(revision)
+  requirement.status = RequirementStatus.IN_REVIEW
+  return revision
+}
+
+/** 답변 재판정 완료 (mock-scenarios 3~5절). */
+function settleAnswerAnalysis(analysis) {
+  const requirement = findRequirement(analysis.requirementId)
+  const clarification = findClarification(analysis.clarificationId)
+  const issue = store.issues.find((i) => i.id === clarification?.issueId) ?? null
+
+  analysis.status = AnalysisStatus.COMPLETED
+  analysis.error = null
+
+  if (!requirement || !clarification || !issue) {
+    analysis.result = { ...EMPTY_RESULT }
+    return
+  }
+
+  const matched = ANSWER_ASSESSMENTS.find((row) => row.answer === clarification.answerText)
+  const verdict = matched ?? UNSUPPORTED_ASSESSMENT
+
+  if (!verdict.sufficient) {
+    //문제는 OPEN으로 남고 같은 문제의 다음 회차 질문이 열린다.
+    const roundNo =
+      store.clarifications
+        .filter((c) => c.issueId === issue.id)
+        .reduce((max, c) => Math.max(max, c.roundNo), 0) + 1
+    const next = {
+      id: store.nextClarificationId++,
+      requirementId: requirement.id,
+      issueId: issue.id,
+      roundNo,
+      questionText: verdict.nextQuestionText,
+      answerText: null,
+      status: ClarificationStatus.WAITING,
+    }
+    store.clarifications.push(next)
+
+    analysis.result = {
+      ...EMPTY_RESULT,
+      requirementIds: [requirement.id],
+      issueIds: [issue.id],
+      clarificationIds: [next.id],
+      assessment: {
+        issueId: issue.id,
+        sufficient: false,
+        reason: verdict.reason,
+        nextClarificationId: next.id,
+      },
+    }
+    return
+  }
+
+  clarification.status = ClarificationStatus.RESOLVED
+  issue.status = IssueStatus.RESOLVED
+
+  const allResolved = issuesOf(requirement.id).every(
+    (i) => i.status === IssueStatus.RESOLVED,
+  )
+  const assessment = {
+    issueId: issue.id,
+    sufficient: true,
+    reason: verdict.reason,
+    nextClarificationId: null,
+  }
+
+  if (!allResolved) {
+    //문제 하나만 풀렸으면 수정안을 만들지 않는다 (Spec 8절 분기 검증 a).
+    analysis.result = {
+      ...EMPTY_RESULT,
+      requirementIds: [requirement.id],
+      issueIds: [issue.id],
+      assessment,
+    }
+    return
+  }
+
+  const revision = proposeRevision(requirement, REVISION_TEXTS.FIRST)
+  analysis.result = {
+    ...EMPTY_RESULT,
+    requirementIds: [requirement.id],
+    issueIds: [issue.id],
+    revisionIds: [revision.id],
+    assessment,
+  }
+}
+
+/** 거절 이후 수정안 재생성 완료 (mock-scenarios 6절). */
+function settleRevisionAnalysis(analysis) {
+  const requirement = findRequirement(analysis.requirementId)
+  analysis.status = AnalysisStatus.COMPLETED
+  analysis.error = null
+
+  if (!requirement) {
+    analysis.result = { ...EMPTY_RESULT }
+    return
+  }
+
+  //거절된 수정안과 근거 답변 이력은 손대지 않는다 (mock-scenarios 6절).
+  const revision = proposeRevision(requirement, REVISION_TEXTS.REGENERATED)
+  analysis.result = {
+    ...EMPTY_RESULT,
+    requirementIds: [requirement.id],
+    revisionIds: [revision.id],
+  }
+}
+
+/** GET /requirements/{id}/workflow — 조회는 새 질문·수정안을 만들지 않는다 (Spec 2절 GET). */
+export function getWorkflowMock(requirementId) {
+  const requirement = findRequirement(requirementId)
+  if (!requirement) {
+    return null
+  }
+  store.analyses.forEach(settlePendingAnalysis)
+
+  return clone({
+    requirementId: requirement.id,
+    status: requirement.status,
+    contentVersion: requirement.contentVersion,
+    activeAnalysis: activeWorkflowAnalysis(requirement.id),
+    issues: issuesOf(requirement.id),
+    clarifications: clarificationsOf(requirement.id),
+    revisions: revisionsOf(requirement.id),
+  })
+}
+
+/**
+ * POST /clarifications/{id}/answers.
+ *
+ * 검증 순서는 Spec 6.2 그대로다. 특히 동일 답변 재제출 판정이
+ * 버전·상태 검증보다 먼저다 — 버전이 이미 진행됐다는 이유만으로 정상
+ * 재전송을 실패시키지 않기 위함이다 (mock-scenarios 8절).
+ */
+export function submitAnswerMock(clarificationId, { answerText, expectedContentVersion }) {
+  const clarification = findClarification(clarificationId)
+  if (!clarification) {
+    return { error: 'NOT_FOUND' }
+  }
+  const requirement = findRequirement(clarification.requirementId)
+  if (!requirement) {
+    return { error: 'NOT_FOUND' }
+  }
+  store.analyses.forEach(settlePendingAnalysis)
+
+  const normalized = normalizeText(answerText)
+
+  //(3) 동일 요청 판정 — 저장된 작업을 그대로 돌려주고 버전을 올리지 않는다.
+  if (clarification.answerText !== null) {
+    if (clarification.answerText !== normalized) {
+      return { error: 'ANSWER_ALREADY_SUBMITTED' }
+    }
+    const original =
+      store.analyses.find(
+        (a) => a.kind === AnalysisKind.ANSWER && a.clarificationId === clarification.id,
+      ) ?? null
+    return {
+      receipt: {
+        clarificationId: clarification.id,
+        requirementId: requirement.id,
+        contentVersion: requirement.contentVersion,
+        analysis: original ? clone(original) : null,
+      },
+      reused: true,
+    }
+  }
+
+  //(4) 새 처리의 전제 검증
+  if (requirement.status === RequirementStatus.CONFIRMED) {
+    return { error: 'REQUIREMENT_CONFIRMED' }
+  }
+  if (activeWorkflowAnalysis(requirement.id)) {
+    return { error: 'IN_PROGRESS' }
+  }
+  if (Number(expectedContentVersion) !== requirement.contentVersion) {
+    return { error: 'VERSION_CONFLICT' }
+  }
+  if (clarification.status !== ClarificationStatus.WAITING) {
+    return { error: 'STATE_CONFLICT' }
+  }
+
+  //(5) 답변 저장·버전 증가·작업 접수는 한 트랜잭션 (Spec 5.14)
+  clarification.answerText = normalized
+  clarification.status = ClarificationStatus.ANSWERED
+  requirement.contentVersion += 1
+
+  const analysis = createWorkflowAnalysis(requirement, AnalysisKind.ANSWER, clarification.id)
+  schedule(
+    analysis.id,
+    normalized.includes(FAILURE_MARKER) ? AnalysisStatus.FAILED : AnalysisStatus.COMPLETED,
+  )
+
+  return {
+    receipt: {
+      clarificationId: clarification.id,
+      requirementId: requirement.id,
+      contentVersion: requirement.contentVersion,
+      analysis: clone(analysis),
+    },
+  }
+}
+
+/** POST /requirements/{id}/revisions — 거절 이후 재생성 (Spec 5.15). */
+export function recreateRevisionMock(requirementId, { expectedContentVersion }) {
+  const requirement = findRequirement(requirementId)
+  if (!requirement) {
+    return { error: 'NOT_FOUND' }
+  }
+  store.analyses.forEach(settlePendingAnalysis)
+
+  if (requirement.status === RequirementStatus.CONFIRMED) {
+    return { error: 'REQUIREMENT_CONFIRMED' }
+  }
+  if (activeWorkflowAnalysis(requirement.id)) {
+    return { error: 'IN_PROGRESS' }
+  }
+
+  const revisions = revisionsOf(requirement.id)
+  if (revisions.some((r) => r.status === RevisionStatus.PROPOSED)) {
+    return { error: 'REVISION_ALREADY_PROPOSED' }
+  }
+  if (issuesOf(requirement.id).some((i) => i.status === IssueStatus.OPEN)) {
+    return { error: 'OPEN_ISSUES_EXIST' }
+  }
+  //거절 이력이 있을 때만 재생성한다. 최초 수정안은 답변 재판정이 만든다 (Spec 5.15).
+  if (!revisions.some((r) => r.status === RevisionStatus.REJECTED)) {
+    return { error: 'STATE_CONFLICT' }
+  }
+  if (Number(expectedContentVersion) !== requirement.contentVersion) {
+    return { error: 'VERSION_CONFLICT' }
+  }
+
+  const analysis = createWorkflowAnalysis(requirement, AnalysisKind.REVISION, null)
+  schedule(analysis.id, AnalysisStatus.COMPLETED)
+  return { analysis: clone(analysis) }
+}
+
+/** POST /revisions/{id}/review — 승인·거절 (Spec 5.16). */
+export function reviewRevisionMock(
+  revisionId,
+  { decision, expectedContentVersion, rejectionReason },
+) {
+  const revision = findRevision(revisionId)
+  if (!revision) {
+    return { error: 'NOT_FOUND' }
+  }
+  const requirement = findRequirement(revision.requirementId)
+  if (!requirement) {
+    return { error: 'NOT_FOUND' }
+  }
+  store.analyses.forEach(settlePendingAnalysis)
+
+  const reason = decision === ReviewDecision.REJECT ? normalizeText(rejectionReason) : null
+
+  //(3) 이미 검토된 수정안 — 같은 결정·같은 사유면 부수 효과 없이 그대로 돌려준다.
+  if (revision.status !== RevisionStatus.PROPOSED) {
+    const sameDecision =
+      (decision === ReviewDecision.APPROVE && revision.status === RevisionStatus.APPROVED) ||
+      (decision === ReviewDecision.REJECT &&
+        revision.status === RevisionStatus.REJECTED &&
+        revision.rejectionReason === reason)
+    if (!sameDecision) {
+      return { error: 'REVISION_ALREADY_REVIEWED' }
+    }
+    //과거 revision과 현재 requirement의 조합이다 (Spec 8절).
+    return {
+      result: { revision: clone(revision), requirement: clone(requirement) },
+      reused: true,
+    }
+  }
+
+  //(4) 새 처리의 전제 검증
+  if (activeWorkflowAnalysis(requirement.id)) {
+    return { error: 'IN_PROGRESS' }
+  }
+  if (requirement.status === RequirementStatus.CONFIRMED) {
+    return { error: 'REQUIREMENT_CONFIRMED' }
+  }
+  if (issuesOf(requirement.id).some((i) => i.status === IssueStatus.OPEN)) {
+    return { error: 'OPEN_ISSUES_EXIST' }
+  }
+  if (Number(expectedContentVersion) !== requirement.contentVersion) {
+    return { error: 'VERSION_CONFLICT' }
+  }
+
+  if (decision === ReviewDecision.APPROVE) {
+    //승인은 버전을 올리지 않는다 (Spec 6.3).
+    revision.status = RevisionStatus.APPROVED
+    revision.rejectionReason = null
+    requirement.status = RequirementStatus.CONFIRMED
+    requirement.approvedRevisionId = revision.id
+    requirement.confirmedText = revision.text
+  } else {
+    //거절 사유가 새 입력이라 버전이 1 오른다. 문제를 자동 재개방하지 않는다 (Spec 6.3).
+    revision.status = RevisionStatus.REJECTED
+    revision.rejectionReason = reason
+    requirement.status = RequirementStatus.CLARIFYING
+    requirement.contentVersion += 1
+    requirement.approvedRevisionId = null
+    requirement.confirmedText = null
+  }
+
+  return { result: { revision: clone(revision), requirement: clone(requirement) } }
 }
