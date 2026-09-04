@@ -36,6 +36,21 @@ class MockWorkflowAnalyzerTests {
 	}
 
 	@Test
+	void extractsNineRequirementsFromRfpDemoDocument() {
+		MockWorkflowAnalyzer analyzer = new MockWorkflowAnalyzer();
+		String rfpContent = "SFR-001 원재료 이력 데이터 수집 및 블록체인 등록\n"
+				+ CONTENT + "\nSEC-001 플랫폼 정보보호 체계 및 이력 데이터 보안";
+
+		var result = analyzer.analyze(new DocumentSnapshot(5, 1, "rfp", rfpContent, "FILE"));
+
+		assertThat(result.requirements()).hasSize(9);
+		assertThat(result.requirements()).extracting(MockWorkflowAnalyzer.RequirementCandidateLegacy::sequenceNo)
+				.containsExactly(1, 2, 3, 4, 5, 6, 7, 8, 9);
+		assertThat(result.requirements().get(4).originalText()).startsWith("PER-002");
+		assertThat(result.requirements().get(4).issues()).hasSize(2);
+	}
+
+	@Test
 	void throwsAiOutputInvalidForUnsupportedContent() {
 		MockWorkflowAnalyzer analyzer = new MockWorkflowAnalyzer();
 		DocumentSnapshot unsupported = new DocumentSnapshot(4, 1, "unknown", "완전히 다른 내용의 요구사항", "TEXT");
@@ -50,7 +65,7 @@ class MockWorkflowAnalyzerTests {
 		com.sua.reqbridge.contract.ai.WorkflowAnalyzer analyzer = new MockWorkflowAnalyzer();
 
 		assertThat(analyzer.adapterType()).isEqualTo(com.sua.reqbridge.contract.AnalysisAdapterType.MOCK);
-		assertThat(analyzer.schemaVersion()).isEqualTo("1.0.0");
+		assertThat(analyzer.schemaVersion()).isEqualTo("1.1.0");
 
 		var docResult = analyzer.analyzeDocument(new com.sua.reqbridge.contract.ai.DocumentAnalysisInput(1L, CONTENT));
 		assertThat(docResult.requirements()).hasSize(1);
