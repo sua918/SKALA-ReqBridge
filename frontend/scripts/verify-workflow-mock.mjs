@@ -220,7 +220,7 @@ check('5.17 summary', cp.summary, {
   openIssueCount: 2,
   waitingQuestionCount: 2,
 })
-check('5.17 basis', cp.basis, [{ requirementId: 401, contentVersion: 1, approvedRevisionId: null }])
+check('5.17 basis', cp.basis, [{ requirementId: 401, sequenceNo: 1, contentVersion: 1, approvedRevisionId: null }])
 check('5.17 요구사항 1건', cp.requirements.length, 1)
 check('5.17 질문 ID', cp.requirements[0].questions.map((q) => q.id), [601, 602])
 check('5.17 질문에 type 포함', cp.requirements[0].questions[0].type, 'QUANTITY_MISSING')
@@ -228,6 +228,7 @@ check('5.17 질문에 evidence 포함', cp.requirements[0].questions[0].evidence
 check('5.17 질문 필드 집합', Object.keys(cp.requirements[0].questions[0]).sort(), ['evidence', 'id', 'issueId', 'questionText', 'roundNo', 'type'])
 
 let dp = store.getDeveloperPreviewMock(101)
+check('5.18 basis', dp.basis, [{ requirementId: 401, sequenceNo: 1, contentVersion: 1, approvedRevisionId: null }])
 check('5.18 확정 없음', dp.confirmedRequirements, [])
 check('5.18 미확정 1건', dp.unconfirmedRequirements.length, 1)
 check('5.18 미확정 status', dp.unconfirmedRequirements[0].status, 'CLARIFYING')
@@ -258,7 +259,7 @@ check('5.17 확정 후 summary', cp.summary, {
   openIssueCount: 0,
   waitingQuestionCount: 0,
 })
-check('5.17 basis는 확정 후에도 전부', cp.basis, [{ requirementId: 401, contentVersion: 4, approvedRevisionId: 701 }])
+check('5.17 basis는 확정 후에도 전부', cp.basis, [{ requirementId: 401, sequenceNo: 1, contentVersion: 4, approvedRevisionId: 701 }])
 
 dp = store.getDeveloperPreviewMock(101)
 check('5.18 확정 1건', dp.confirmedRequirements.length, 1)
@@ -277,9 +278,23 @@ check('5.18 근거 답변 본문', cr.evidenceAnswers.map((a) => a.answerText), 
 ])
 check('5.18 basedOnClarificationIds와 일치', cr.evidenceAnswers.map((a) => a.id).sort(), [...cr.approvedRevision.basedOnClarificationIds].sort())
 
+// basis는 고객 질문 포함 여부와 무관하게 모든 요구사항의 실제 순번을 유지한다.
+const ordinalStore = store.getMockStore()
+ordinalStore.requirements.push(
+  { ...ordinalStore.requirements[0], id: 403, sequenceNo: 3, status: 'EXTRACTED', approvedRevisionId: null, confirmedText: null },
+  { ...ordinalStore.requirements[0], id: 402, sequenceNo: 2, status: 'EXTRACTED', approvedRevisionId: null, confirmedText: null },
+)
+cp = store.getCustomerPreviewMock(101)
+check('5.17 질문 없는 요구사항도 basis 순번 유지', cp.basis.map((b) => [b.requirementId, b.sequenceNo]), [
+  [401, 1], [402, 2], [403, 3],
+])
+dp = store.getDeveloperPreviewMock(101)
+check('5.18 basis 순번 유지', dp.basis.map((b) => [b.requirementId, b.sequenceNo]), [
+  [401, 1], [402, 2], [403, 3],
+])
+
 // 6.4: 확정본과 승인 수정안이 어긋나면 409
-const raw = store.getMockStore()
-raw.requirements.find((x) => x.id === 401).confirmedText = '손상된 확정본'
+ordinalStore.requirements.find((x) => x.id === 401).confirmedText = '손상된 확정본'
 check('6.4 불일치 시 409', store.getDeveloperPreviewMock(101).error, 'PREVIEW_VERSION_CONFLICT')
 
 check('5.17 없는 문서', store.getCustomerPreviewMock(999), null)
