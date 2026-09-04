@@ -50,7 +50,8 @@ public class ReportService {
 
 		PreviewSummary summary = computeSummary(sortedRequirements, workflow);
 		List<PreviewBasis> basis = sortedRequirements.stream()
-				.map(r -> new PreviewBasis(r.id(), r.contentVersion(), r.approvedRevisionId()))
+				.map(r -> new PreviewBasis(
+						r.id(), r.sequenceNo(), r.contentVersion(), r.approvedRevisionId()))
 				.toList();
 
 		List<CustomerRequirement> customerReqs = new ArrayList<>();
@@ -99,7 +100,8 @@ public class ReportService {
 
 		PreviewSummary summary = computeSummary(sortedRequirements, workflow);
 		List<PreviewBasis> basis = sortedRequirements.stream()
-				.map(r -> new PreviewBasis(r.id(), r.contentVersion(), r.approvedRevisionId()))
+				.map(r -> new PreviewBasis(
+						r.id(), r.sequenceNo(), r.contentVersion(), r.approvedRevisionId()))
 				.toList();
 
 		List<ConfirmedRequirement> confirmedList = new ArrayList<>();
@@ -193,6 +195,7 @@ public class ReportService {
 
 	public record PreviewBasis(
 			long requirementId,
+			int sequenceNo,
 			long contentVersion,
 			Long approvedRevisionId) {
 	}

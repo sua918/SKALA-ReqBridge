@@ -78,7 +78,9 @@ class ReportServiceTests {
 		// Basis includes all requirements sorted by sequenceNo
 		assertThat(preview.basis()).hasSize(2);
 		assertThat(preview.basis().get(0).requirementId()).isEqualTo(401L);
+		assertThat(preview.basis().get(0).sequenceNo()).isEqualTo(1);
 		assertThat(preview.basis().get(1).requirementId()).isEqualTo(402L);
+		assertThat(preview.basis().get(1).sequenceNo()).isEqualTo(2);
 
 		// Only req1 has WAITING question on OPEN issue
 		assertThat(preview.requirements()).hasSize(1);
@@ -100,7 +102,7 @@ class ReportServiceTests {
 				401L, 101L, 301L, 1, "원문 1", RequirementStatus.CONFIRMED, 4L, 701L, "확정 텍스트 1");
 		RequirementSnapshot req2 = new RequirementSnapshot(
 				402L, 101L, 301L, 2, "원문 2", RequirementStatus.CLARIFYING, 2L, null, null);
-		when(core.listRequirements(101L)).thenReturn(List.of(req1, req2));
+		when(core.listRequirements(101L)).thenReturn(List.of(req2, req1)); // unsorted order to check basis sorting
 
 		IssueSnapshot issue1 = new IssueSnapshot(501L, AmbiguityType.QUANTITY_MISSING, "근거 1", IssueStatus.RESOLVED);
 		QuestionSnapshot q1 = new QuestionSnapshot(
@@ -119,6 +121,9 @@ class ReportServiceTests {
 		when(workflowPort.getPreview(101L)).thenReturn(new WorkflowPreviewSnapshot(101L, List.of(wfReq1, wfReq2)));
 
 		ReportService.DeveloperPreview preview = service.getDeveloperPreview(101L);
+
+		assertThat(preview.basis()).extracting(ReportService.PreviewBasis::sequenceNo)
+				.containsExactly(1, 2);
 
 		assertThat(preview.confirmedRequirements()).hasSize(1);
 		ReportService.ConfirmedRequirement confirmed = preview.confirmedRequirements().get(0);
