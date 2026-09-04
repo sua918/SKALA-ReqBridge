@@ -37,7 +37,7 @@ class ReportControllerTests {
 	@Test
 	void getCustomerPreviewReturnsOkWithDataEnvelope() throws Exception {
 		ReportService.PreviewSummary summary = new ReportService.PreviewSummary(1, 0, 1, 1);
-		ReportService.PreviewBasis basis = new ReportService.PreviewBasis(401L, 1L, null);
+		ReportService.PreviewBasis basis = new ReportService.PreviewBasis(401L, 1, 1L, null);
 		ReportService.CustomerQuestion q = new ReportService.CustomerQuestion(
 				601L, 501L, AmbiguityType.QUANTITY_MISSING, "정량 기준 누락", 1, "질문 1?");
 		ReportService.CustomerRequirement req = new ReportService.CustomerRequirement(
@@ -53,13 +53,14 @@ class ReportControllerTests {
 				.andExpect(jsonPath("$.data.documentTitle").value("테스트 문서"))
 				.andExpect(jsonPath("$.data.summary.totalRequirements").value(1))
 				.andExpect(jsonPath("$.data.basis[0].requirementId").value(401))
+				.andExpect(jsonPath("$.data.basis[0].sequenceNo").value(1))
 				.andExpect(jsonPath("$.data.requirements[0].questions[0].id").value(601));
 	}
 
 	@Test
 	void getDeveloperPreviewReturnsOkWithDataEnvelope() throws Exception {
 		ReportService.PreviewSummary summary = new ReportService.PreviewSummary(1, 1, 0, 0);
-		ReportService.PreviewBasis basis = new ReportService.PreviewBasis(401L, 4L, 701L);
+		ReportService.PreviewBasis basis = new ReportService.PreviewBasis(401L, 1, 4L, 701L);
 		ReportService.RevisionDetail rev = new ReportService.RevisionDetail(
 				701L, 401L, 1, "수정안 텍스트", "APPROVED", 4L, List.of(601L), null, List.of());
 		ReportService.ConfirmedRequirement confirmed = new ReportService.ConfirmedRequirement(
@@ -72,6 +73,7 @@ class ReportControllerTests {
 		mockMvc.perform(get("/api/documents/101/previews/developer"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.documentId").value(101))
+				.andExpect(jsonPath("$.data.basis[0].sequenceNo").value(1))
 				.andExpect(jsonPath("$.data.confirmedRequirements[0].approvedRevision.id").value(701))
 				.andExpect(jsonPath("$.data.confirmedRequirements[0].approvedRevision.status").value("APPROVED"));
 	}

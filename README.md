@@ -104,36 +104,36 @@ ReqBridge는 PM이 반복하던 **기준 탐색 → 질문 작성 → 답변 판
     <td width="50%" valign="top">
       <sub>01 · DOCUMENT</sub>
       <h3>PDF · TEXT 요구사항 등록</h3>
-      <p>프로젝트별로 텍스트 원문이나 최대 10MB PDF를 등록합니다. PDF 원본은 Private Storage에 보관하고 분석용 텍스트를 추출합니다.</p>
+      <p>프로젝트별로 텍스트나 PDF 요구사항 문서를 등록하고 한곳에서 관리합니다.</p>
     </td>
     <td width="50%" valign="top">
       <sub>02 · ANALYSIS</sub>
       <h3>등록 직후 자동 분석</h3>
-      <p>문서 저장이 커밋되면 비동기 분석 작업을 자동 접수합니다. 화면은 Analysis 상태를 polling하며, 수동 분석 접수 API는 자동 접수 실패를 복구할 때 사용합니다.</p>
+      <p>문서를 등록하면 분석이 자동으로 시작되며, 화면에서 진행 상태와 결과를 확인할 수 있습니다.</p>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
       <sub>03 · AMBIGUITY</sub>
       <h3>불명확성 근거 추적</h3>
-      <p>수량·성능·조건·주체 등 7종의 불명확성 유형과 원문 근거를 Issue 단위로 구조화합니다.</p>
+      <p>빠진 기준과 모호한 표현을 찾아 유형별로 분류하고, 원문의 근거와 함께 보여줍니다.</p>
     </td>
     <td width="50%" valign="top">
       <sub>04 · CLARIFICATION</sub>
       <h3>다중 회차 확인 질문</h3>
-      <p>고객 답변이 충분한지 다시 판정하고, 기준이 부족하면 같은 Issue에 다음 회차 질문을 이어서 생성합니다.</p>
+      <p>확인 질문과 고객 답변을 이어가며 요구사항에 필요한 기준을 구체화합니다.</p>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
       <sub>05 · REVIEW</sub>
       <h3>PM 승인 Workflow</h3>
-      <p>해결된 이슈와 답변을 근거로 수정안을 만들고, PM의 승인·거절·재생성을 거쳐 최종 요구사항을 확정합니다.</p>
+      <p>답변을 반영한 수정안을 PM이 검토하고 승인해 최종 요구사항을 확정합니다.</p>
     </td>
     <td width="50%" valign="top">
       <sub>06 · PREVIEW</sub>
       <h3>대상별 Preview</h3>
-      <p>대기 질문은 고객 질문서로, 승인된 수정안과 근거 답변은 개발팀 인계 화면으로 실시간 조합합니다.</p>
+      <p>고객에게 보낼 질문서와 개발팀에 전달할 확정 내용을 대상에 맞게 미리 확인합니다.</p>
     </td>
   </tr>
 </table>
@@ -388,7 +388,7 @@ ReqBridge/
 
 ## 09. Getting Started
 
-아래 순서는 새 개발 환경에서 **Supabase 기반 실제 Backend와 Frontend를 함께 실행하는 기준**입니다.
+Java 21, Node.js 24, npm 11 이상이 필요합니다. 전체 기능은 Supabase 기반 Backend 연동 모드로 실행합니다.
 
 <table>
   <tr>
@@ -399,175 +399,27 @@ ReqBridge/
   </tr>
 </table>
 
-<details open>
-<summary><b>Step 1. 저장소 내려받기</b></summary>
-<br />
-
 ~~~bash
 git clone https://github.com/sua918/SKALA-ReqBridge.git
 cd SKALA-ReqBridge
 ~~~
 
-</details>
-
-<details open>
-<summary><b>Step 2. Supabase Database 준비</b></summary>
-<br />
-
-Supabase Dashboard에서 프로젝트를 만든 뒤 <b>SQL Editor</b>를 엽니다. 새 DB에 아래 파일의 SQL을 <b>V1부터 V4까지 한 파일씩 순서대로</b> 실행합니다.
-
-~~~text
-backend/src/main/resources/db/migration/
-├─ V1__initial_schema.sql
-├─ V2__requirement_status_workflow.sql
-├─ V3__document_file_source.sql
-└─ V4__document_file_metadata.sql
-~~~
-
-각 파일의 실행이 성공한 다음 다음 버전으로 넘어갑니다. <code>supabase</code> 프로필에서는 Flyway가 꺼져 있으므로 애플리케이션 실행만으로 테이블이 자동 생성되지 않습니다.
-
-> V1은 초기 빈 스키마용입니다. 이미 ReqBridge 테이블과 데이터가 있는 DB에는 V1을 다시 실행하지 않습니다.
-
-</details>
-
-<details open>
-<summary><b>Step 3. PDF Storage 준비</b></summary>
-<br />
-
-PDF 업로드를 사용한다면 Supabase Dashboard의 <b>Storage</b>에서 다음 bucket을 생성합니다.
-
-| 설정 | 값 |
-| --- | --- |
-| Bucket name | <code>reqbridge-documents</code> |
-| Public bucket | 비활성화 |
-| 허용 MIME | <code>application/pdf</code> |
-| 파일 크기 | 10MB 이상 허용 |
-
-Frontend가 Storage에 직접 접근하는 정책은 추가하지 않습니다. 파일 업로드와 삭제는 Backend의 <code>service_role</code> 권한으로 처리합니다.
-
-> TEXT 문서 기능만 확인한다면 Storage 설정은 생략할 수 있습니다.
-
-</details>
-
-<details open>
-<summary><b>Step 4. Supabase 연결 정보 확인</b></summary>
-<br />
-
-Supabase Dashboard의 <b>Connect</b> 화면에서 <b>Session pooler</b> 정보를 확인합니다.
-
-| 항목 | 기준 |
-| --- | --- |
-| Host | Dashboard에 표시된 Session pooler host |
-| Port | <code>5432</code> |
-| Database | <code>postgres</code> |
-| Username | <code>postgres.&lt;project-ref&gt;</code> |
-| SSL | <code>sslmode=require</code> |
-
-Spring Boot와 Hibernate의 prepared statement를 사용하므로 Transaction pooler의 <code>6543</code> 포트는 사용하지 않습니다.
-
-</details>
-
-<details open>
-<summary><b>Step 5. Backend 환경변수 등록</b></summary>
-<br />
-
-Spring Boot는 .env 파일을 자동으로 읽지 않습니다. Backend를 실행할 터미널이나 IDE Run Configuration에 값을 등록합니다.
-
-Windows PowerShell:
-
-~~~powershell
-$env:SPRING_PROFILES_ACTIVE = "supabase"
-$env:SUPABASE_DB_URL = "jdbc:postgresql://<session-pooler-host>:5432/postgres?sslmode=require"
-$env:SUPABASE_DB_USERNAME = "postgres.<project-ref>"
-$env:SUPABASE_DB_PASSWORD = "<database-password>"
-
-$env:SUPABASE_URL = "https://<project-ref>.supabase.co"
-$env:SUPABASE_STORAGE_BUCKET = "reqbridge-documents"
-$env:SUPABASE_SERVICE_ROLE_KEY = "<server-only-service-role-key>"
-~~~
-
-macOS · Linux:
-
-~~~bash
-export SPRING_PROFILES_ACTIVE="supabase"
-export SUPABASE_DB_URL="jdbc:postgresql://<session-pooler-host>:5432/postgres?sslmode=require"
-export SUPABASE_DB_USERNAME="postgres.<project-ref>"
-export SUPABASE_DB_PASSWORD="<database-password>"
-
-export SUPABASE_URL="https://<project-ref>.supabase.co"
-export SUPABASE_STORAGE_BUCKET="reqbridge-documents"
-export SUPABASE_SERVICE_ROLE_KEY="<server-only-service-role-key>"
-~~~
-
-DB 비밀번호와 <code>service_role</code> key는 소스, Frontend 환경변수, 커밋에 포함하지 않습니다.
-
-</details>
-
-<details open>
-<summary><b>Step 6. Backend 실행과 상태 확인</b></summary>
-<br />
-
-Windows PowerShell:
+Supabase 연결과 Storage를 준비한 뒤 Backend와 Frontend를 각각 실행합니다.
 
 ~~~powershell
 cd backend
 .\gradlew.bat bootRun
 ~~~
 
-macOS · Linux:
-
-~~~bash
-cd backend
-./gradlew bootRun
-~~~
-
-다음 로그가 확인되면 정상적으로 실행된 상태입니다.
-
-~~~text
-The following 1 profile is active: "supabase"
-HikariPool ... Start completed
-Started ReqbridgeApplication
-~~~
-
-새 터미널에서 Health API를 확인합니다.
+새 터미널에서:
 
 ~~~powershell
-Invoke-RestMethod http://localhost:8080/api/health
-~~~
-
-Swagger UI는 <a href="http://localhost:8080/swagger-ui/index.html">http://localhost:8080/swagger-ui/index.html</a>에서 확인할 수 있습니다.
-
-</details>
-
-<details open>
-<summary><b>Step 7. Frontend 실행</b></summary>
-<br />
-
-새 터미널을 열고 저장소의 <code>frontend</code> 디렉터리에서 실행합니다.
-
-~~~bash
 cd frontend
 npm ci
 npm run dev
 ~~~
 
-브라우저에서 <a href="http://localhost:5173">http://localhost:5173</a>에 접속합니다. 개발 서버의 <code>/api</code> 요청은 <code>http://localhost:8080</code> Backend로 전달됩니다.
-
-</details>
-
-<details>
-<summary><b>Backend 없이 Frontend만 확인하기</b></summary>
-<br />
-
-Frontend 메모리 Mock은 Supabase와 Spring Boot 없이 화면과 Workflow를 확인하는 모드입니다.
-
-~~~bash
-cd frontend
-npm ci
-npm run dev:mock
-~~~
-
-</details>
+> Supabase Database 연결과 환경변수는 [연결 가이드](./docs/backend/supabase-connection.md)를 확인하세요.
 
 <table>
   <tr>
@@ -578,42 +430,7 @@ npm run dev:mock
   </tr>
 </table>
 
-<details>
-<summary><b>Local PostgreSQL로 실행하기</b></summary>
-<br />
-
-Supabase 대신 Docker의 로컬 PostgreSQL을 사용하려면 저장소 루트에서 실행합니다.
-
-~~~powershell
-Copy-Item .env.example .env
-docker compose up -d
-~~~
-
-그다음 별도의 터미널에서 Backend를 기본 프로필로 실행합니다.
-
-~~~powershell
-cd backend
-.\gradlew.bat bootRun
-~~~
-
-기본 프로필에서는 Flyway가 V1부터 V4까지 자동으로 적용합니다.
-
-</details>
-
-<details>
-<summary><b>실행 오류 빠르게 확인하기</b></summary>
-<br />
-
-| 증상 | 확인할 항목 |
-| --- | --- |
-| DB 연결 timeout | Direct host 대신 Session pooler host와 5432 포트를 사용했는지 확인 |
-| password authentication failed | pooler username과 프로젝트 DB 비밀번호 확인 |
-| relation app.project does not exist | Supabase SQL Editor에 V1~V4를 순서대로 적용했는지 확인 |
-| Hibernate validation 실패 | 적용한 Migration과 현재 코드 버전이 같은지 확인 |
-| PDF 업로드 500 | Private bucket 이름, Supabase URL, service_role key 확인 |
-| Frontend API 연결 실패 | Backend 8080 실행 여부와 <code>/api/health</code> 응답 확인 |
-
-</details>
+Backend 없이 화면과 Workflow만 확인하려면 Frontend에서 `npm run dev:mock`을 실행합니다. Local PostgreSQL은 `.env.example`을 복사한 뒤 저장소 루트에서 `docker compose up -d`로 실행할 수 있습니다.
 
 ## 10. Verification
 
