@@ -29,6 +29,16 @@ public class AnalysisConfiguration {
 	}
 
 	@Bean
+	@ConditionalOnProperty(name = "reqbridge.ai.provider", havingValue = "llm")
+	@ConditionalOnBean(CoreRequirementPort.class)
+	WorkflowAnalyzer openAiWorkflowAnalyzer(
+			@org.springframework.beans.factory.annotation.Value("${openai.api-key:}") String apiKey,
+			@org.springframework.beans.factory.annotation.Value("${openai.chat.options.model:gpt-4o-mini}") String model,
+			ObjectMapper json) {
+		return new OpenAiWorkflowAnalyzer(apiKey, model, json);
+	}
+
+	@Bean
 	@ConditionalOnBean(CoreRequirementPort.class)
 	DocumentAnalysisService documentAnalysisService(AnalysisRepository analyses,
 			AmbiguityIssueRepository issues,

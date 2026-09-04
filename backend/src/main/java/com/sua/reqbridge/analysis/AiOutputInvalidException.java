@@ -5,4 +5,8 @@ public class AiOutputInvalidException extends RuntimeException {
 	public AiOutputInvalidException(String message) {
 		super(message);
 	}
+
+	public AiOutputInvalidException(String message, Throwable cause) {
+		super(message, cause);
+	}
 }
