@@ -2,7 +2,6 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { createProject, listProjects } from '@/api/projects'
-import { useMock } from '@/api/config'
 import ErrorMessage from '@/components/common/ErrorMessage.vue'
 import { useApiError } from '@/composables/useApiError'
 
@@ -67,7 +66,6 @@ onMounted(() => {
 <template>
   <section class="project-page">
     <h1>프로젝트 목록</h1>
-    <p class="meta">Mock: {{ useMock ? 'ON' : 'OFF' }}</p>
 
     <ErrorMessage
       v-if="hasError"
@@ -90,8 +88,11 @@ onMounted(() => {
               class="list-button"
               @click="openProject(project.id)"
             >
-              <span class="list-title">#{{ project.id }} {{ project.name }}</span>
-              <span class="list-meta">{{ project.description ?? '설명 없음' }}</span>
+              <div class="list-copy">
+                <strong class="list-title">{{ project.name }}</strong>
+                <p class="list-meta">{{ project.description ?? '설명 없음' }}</p>
+              </div>
+              <span class="list-action">프로젝트 열기 →</span>
             </button>
           </li>
         </ul>
@@ -126,14 +127,8 @@ onMounted(() => {
 }
 
 h1 {
-  margin: 0 0 4px;
-  font-size: 1.5rem;
-}
-
-.meta {
   margin: 0 0 20px;
-  font-size: 0.85rem;
-  color: #94a3b8;
+  font-size: 1.5rem;
 }
 
 .panel {
@@ -183,14 +178,28 @@ h1 {
   background: #eff6ff;
 }
 
+.list-copy {
+  min-width: 0;
+}
+
 .list-title {
+  display: block;
   font-weight: 600;
   color: #0f172a;
 }
 
 .list-meta {
+  margin: 4px 0 0;
   color: #64748b;
   font-size: 0.8rem;
+}
+
+.list-action {
+  flex-shrink: 0;
+  color: #1d4ed8;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .field {

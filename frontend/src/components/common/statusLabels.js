@@ -4,11 +4,11 @@
  */
 export const STATUS_LABELS = Object.freeze({
   requirement: {
-    EXTRACTED: '추출됨',
-    AMBIGUOUS: '불명확',
-    CLARIFYING: '확인 중',
-    IN_REVIEW: '검토 중',
-    CONFIRMED: '확정',
+    EXTRACTED: '추출 완료',
+    AMBIGUOUS: '불명확성 발견',
+    CLARIFYING: '보완 답변 필요',
+    IN_REVIEW: '수정안 승인 대기',
+    CONFIRMED: '확정 완료',
   },
   analysis: {
     PENDING: '대기',

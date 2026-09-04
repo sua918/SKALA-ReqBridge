@@ -13,7 +13,7 @@ const {
   resolving,
 } = useBreadcrumbLabels()
 
-/** 조회한 이름을 우선 쓰고, 아직 없으면 ID 표기로 대체한다. */
+/** 조회한 이름을 우선 쓰고, 없으면 일반명으로 대체한다. DB ID는 표시하지 않는다. */
 function resolvedName(kind) {
   if (kind === 'project') {
     return projectName.value
@@ -39,7 +39,7 @@ function documentProjectCrumb(name) {
   return {
     type: 'text',
     key: 'documentProject',
-    label: name ?? `프로젝트 #${projectId}`,
+    label: name ?? '프로젝트',
     to: { name: 'document-list', params: { projectId: String(projectId) } },
   }
 }
@@ -69,7 +69,7 @@ function toCrumb(item) {
     return {
       type: 'text',
       key: 'requirementDocument',
-      label: name ?? (documentId ? `문서 #${documentId}` : '문서'),
+      label: name ?? '문서',
       to: documentId
         ? {
             name: 'document-detail',
@@ -93,7 +93,7 @@ function toCrumb(item) {
     return {
       type: 'text',
       key: item.dynamic,
-      label: name ?? `${item.prefix ?? ''}${id}`,
+      label: name ?? item.fallback ?? '항목',
       to,
     }
   }

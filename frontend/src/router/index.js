@@ -28,7 +28,7 @@ const router = createRouter({
           meta: {
             breadcrumb: [
               { label: '프로젝트', to: { name: 'project-list' } },
-              { dynamic: 'projectId', prefix: '프로젝트 #', resolve: 'project' },
+              { dynamic: 'projectId', fallback: '프로젝트', resolve: 'project' },
               { label: '문서' },
             ],
           },
@@ -42,7 +42,7 @@ const router = createRouter({
               { label: '프로젝트', to: { name: 'project-list' } },
               // 문서 목록으로 돌아갈 projectId는 문서 응답에서 얻는다
               { resolve: 'documentProject' },
-              { dynamic: 'documentId', prefix: '문서 #', resolve: 'document' },
+              { dynamic: 'documentId', fallback: '문서', resolve: 'document' },
             ],
           },
         },
@@ -56,7 +56,7 @@ const router = createRouter({
               { resolve: 'documentProject' },
               // 문서명은 GET /requirements/{id}의 documentId로 조회한다
               { resolve: 'requirementDocument' },
-              { dynamic: 'requirementId', prefix: '요구사항 #' },
+              { label: '요구사항 검토' },
             ],
           },
         },
@@ -70,14 +70,14 @@ const router = createRouter({
               { resolve: 'documentProject' },
               {
                 dynamic: 'documentId',
-                prefix: '문서 #',
+                fallback: '문서',
                 resolve: 'document',
                 to: (route) => ({
                   name: 'document-detail',
                   params: { documentId: route.params.documentId },
                 }),
               },
-              { label: 'Preview' },
+              { label: '문서 미리보기' },
             ],
           },
         },
