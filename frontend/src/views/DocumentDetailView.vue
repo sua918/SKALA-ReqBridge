@@ -294,7 +294,7 @@ onMounted(() => {
             <StatusBadge v-if="latestAnalysisStatus" kind="analysis" :value="latestAnalysisStatus" />
           </div>
 
-          <div v-if="isPolling || isLocked" class="sysnote" style="--tone: var(--on-blue)">
+          <div v-if="isPolling || isLocked" class="sysnote" style="--tone: var(--blue-so); --tone-ink: var(--blue-tx)">
             <span class="scan" aria-hidden="true" />
             <div class="body">
               <div class="head"><span class="k">분석 처리 중</span></div>

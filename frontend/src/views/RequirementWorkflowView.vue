@@ -400,7 +400,7 @@ onMounted(() => {
 
       <!-- 작업 열 -->
       <div class="right" data-reveal>
-        <div v-if="isLocked" class="sysnote" style="--tone: var(--on-blue)">
+        <div v-if="isLocked" class="sysnote" style="--tone: var(--blue-so); --tone-ink: var(--blue-tx)">
           <span class="scan" aria-hidden="true" />
           <div class="body">
             <!-- 작업의 내부 ID를 적어 두었지만, 사용자가 그 번호로 할 수 있는 일이 없다. -->

@@ -42,8 +42,8 @@
   --green-bg:#DAF5DE;  --green-bd:#AEE6B8;  --green-tx:#015725;  --green-so:#058C40;
   --red-bg:#FFE6E4;    --red-bd:#FFC6C0;    --red-tx:#821C1E;    --red-so:#C63D3D;
 
-  /* 어두운 판(.sysnote) 위에서 쓰는 밝은 상태색.
-     -so 계열은 흰 바탕 기준으로 뽑은 값이라 먹판 위에서는 가라앉는다. */
+  /* 예전 먹판(.sysnote) 전용 밝은 상태색.
+     알림을 연한 틴트로 바꾸면서 쓰이지 않는다. 되돌릴 여지만 남겨 둔다. */
   --on-red:#FF8A85; --on-blue:#9FB2FF; --on-green:#6EE7A0; --on-amber:#F7C877;
 
   --rule:rgba(2, 1, 0, .14);
@@ -414,44 +414,69 @@ button { font: inherit; }
    색은 작은 표식(점·머리말)에만 남긴다 — 먹판 위에서 훨씬 또렷하다. */
 .sysnote {
   position: relative; overflow: hidden;
-  display: flex; align-items: center; gap: 20px;
+  display: flex; align-items: center; gap: 16px;
   padding: 15px 18px 16px;
-  background: color-mix(in srgb, var(--tone) 9%, var(--primary-950)); color: var(--bg-50);
-  /* 판 가장자리에도 상태색을 아주 옅게 얹어, 태그를 못 봐도 색이 먼저 걸린다. */
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 32%, transparent);
+  border-radius: var(--radius-card);
+  /* 연한 상태 틴트 + 1px 테두리. 실패 배너와 같은 형태라 두 알림이 한 종류로 읽힌다.
+     먹판은 이 화면에서 혼자 다른 언어였고, 흰 카드 사이에서 구멍처럼 보였다. */
+  background: color-mix(in srgb, var(--tone) 8%, #fff);
+  border: 1px solid color-mix(in srgb, var(--tone) 32%, #fff);
+  color: var(--tone-ink);
 }
 .sysnote > .body { flex: 1 1 auto; min-width: 0; }
 .sysnote .head { display: flex; align-items: center; gap: 11px; }
-/* 상태는 「꽉 채운 밝은 태그」가 말한다. 먹판 위 형광색 덩어리라 실패·완료가 멀리서도 갈린다.
-   점이나 글자색만으로는 판이 다 검어서 종류가 구분되지 않았다. */
+
+/* 상태는 「도는 표시 + 굵은 한 줄」이 말한다.
+   형광 블록은 먹판 위에서만 필요했던 장치다. 밝은 판에서는 글자 무게로 충분하고,
+   도는 표시가 「지금 돌고 있다」를 태그보다 정확히 전한다. */
 .sysnote .k {
-  display: inline-flex; align-items: center; padding: 4px 10px 5px; border-radius: 2px;
-  background: var(--tone); color: var(--primary-950);
-  font-family: var(--font-micro); font-size: var(--fs-nano); font-weight: 700;
-  letter-spacing: .12em; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 9px;
+  font-family: var(--font-body); font-size: var(--fs-h3); font-weight: var(--fw-title);
+  letter-spacing: var(--tr-title); color: var(--tone-ink); white-space: nowrap;
 }
+.sysnote .k::before {
+  content: ''; flex: 0 0 auto; width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--tone) 26%, #fff);
+  border-top-color: var(--tone);
+  animation: rb-spin .9s linear infinite;
+}
+/* 결과가 끝난 알림(성공·실패)에는 도는 표시를 걸지 않는다. */
+.sysnote.is-done .k::before { animation: none; border-top-color: var(--tone); }
+
 .sysnote .code {
-  font-family: var(--font-micro); font-size: var(--fs-nano); letter-spacing: .1em;
-  color: rgba(249, 250, 253, .42); padding-left: 10px; border-left: 1px solid rgba(249, 250, 253, .16);
+  font-family: var(--font-micro); font-size: var(--fs-nano); letter-spacing: .06em;
+  color: color-mix(in srgb, var(--tone-ink) 55%, #fff);
+  padding-left: 10px; border-left: 1px solid color-mix(in srgb, var(--tone) 28%, #fff);
 }
 .sysnote .msg {
-  margin: 9px 0 0; font-size: var(--fs-sm); line-height: 1.7; color: rgba(249, 250, 253, .82);
+  margin: 7px 0 0; font-size: var(--fs-sm); line-height: 1.7;
+  color: color-mix(in srgb, var(--tone-ink) 82%, #fff);
 }
 .sysnote .act {
   flex: 0 0 auto; padding: 9px 18px 10px; border-radius: 999px; cursor: pointer;
-  background: transparent; border: 1px solid rgba(249, 250, 253, .26); color: var(--bg-50);
+  background: #fff; border: 1px solid color-mix(in srgb, var(--tone) 40%, #fff);
+  color: var(--tone-ink);
   font-family: var(--font-micro); font-size: var(--fs-micro); font-weight: 500;
-  letter-spacing: var(--tr-label); text-transform: uppercase;
+  letter-spacing: var(--tr-label);
   transition: background-color .3s var(--ease), border-color .3s var(--ease);
 }
-.sysnote .act:hover:not(:disabled) { background: rgba(249, 250, 253, .12); border-color: rgba(249, 250, 253, .5); }
-.sysnote .act:disabled { opacity: .4; cursor: not-allowed; }
+.sysnote .act:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--tone) 10%, #fff);
+  border-color: color-mix(in srgb, var(--tone) 60%, #fff);
+}
+.sysnote .act:disabled { opacity: .45; cursor: not-allowed; }
 
-/** 진행 중일 때 바닥을 훑고 지나가는 선 — 작업이 살아 있다는 신호. */
+/** 진행 중일 때 바닥을 훑고 지나가는 선 — 작업이 살아 있다는 신호.
+    밝은 판이라 형광일 필요가 없다. 얇게 깔고 투명도로 눌러 둔다. */
 .sysnote .scan {
   position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
   background: linear-gradient(90deg, transparent, var(--tone), transparent) 0 0 / 200% 100%;
+  opacity: .55;
   animation: rb-shimmer 1.8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sysnote .k::before { animation: none; }
+  .sysnote .scan { animation: none; opacity: .3; }
 }
 
 /* ── 칩 (nexus PageHero) ──────────────────────────────────────────
