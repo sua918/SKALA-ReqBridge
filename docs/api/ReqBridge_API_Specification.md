@@ -89,8 +89,8 @@ Java의 일반 length/@Size와 JavaScript length만으로 코드 포인트 제�
 | P1 | POST | `/api/clarifications/{clarificationId}/answers` | 답변 저장·재판정 접수 | 신형섭 |
 | P1 | POST | `/api/requirements/{requirementId}/revisions` | 거절 이후 수정안 재생성 접수 | 신형섭 |
 | P1 | POST | `/api/revisions/{revisionId}/review` | 수정안 승인·거절 | 신형섭 |
-| P2 | GET | `/api/documents/{documentId}/previews/customer` | 고객 질문서 Preview | 한형준 |
-| P2 | GET | `/api/documents/{documentId}/previews/developer` | 개발팀용 Preview | 한형준 |
+| P2 | GET | `/api/documents/{documentId}/previews/customer` | 고객 질문서 Preview | 신형섭 |
+| P2 | GET | `/api/documents/{documentId}/previews/developer` | 개발팀용 Preview | 신형섭 |
 
 ## 4. 공통 enum 계약
 
@@ -842,7 +842,7 @@ CLARIFYING, 모든 문제 RESOLVED, 활성 작업/PROPOSED 수정안 없음, 거
 
 ### 5.17. 고객 질문서 Preview
 
-`GET /api/documents/{documentId}/previews/customer` · 한형준 · P2
+`GET /api/documents/{documentId}/previews/customer` · 신형섭 · P2
 
 P2 구현. 현재 OPEN 문제의 WAITING 질문만 제공한다. 질문 없는 요구사항은 requirements에서 제외한다. basis는 모든 요구사항의 읽기 버전. summary는 해당 문서 전체 기준이다. REPEATABLE_READ로 동일 스냅샷에서 조합한다.
 
@@ -901,7 +901,7 @@ P2 구현. 현재 OPEN 문제의 WAITING 질문만 제공한다. 질문 없는 �
 
 ### 5.18. 개발팀용 Preview
 
-`GET /api/documents/{documentId}/previews/developer` · 한형준 · P2
+`GET /api/documents/{documentId}/previews/developer` · 신형섭 · P2
 
 P2 구현. 승인된 수정안과 근거 답변만 확정 목록에 포함한다. 미확정 요구사항은 별도 배열이다. issues는 해당 요구사항의 모든 Issue 이력(ID 오름차순), questions는 모든 Clarification 이력(issueId → roundNo 오름차순)이다. 각 요구사항 배열은 sequenceNo 오름차순. basis는 모든 요구사항. REPEATABLE_READ 조회 및 approvedRevisionId/본문 일치 검증. 파일 다운로드와 AI 재생성 없음.
 
