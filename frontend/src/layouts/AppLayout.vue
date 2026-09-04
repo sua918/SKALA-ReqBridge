@@ -1,4 +1,5 @@
 <script setup>
+import DitherWave from '@/components/graphics/DitherWave.vue'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useBreadcrumbLabels } from '@/composables/useBreadcrumbLabels'
@@ -110,6 +111,11 @@ function toCrumb(item) {
 <template>
   <div class="app-layout">
     <header class="app-header">
+      <!-- 로고·경로는 왼쪽에 붙고 오른쪽은 늘 빈다. 그 자리에만 파도를 깐다. -->
+      <div class="app-deco" aria-hidden="true">
+        <DitherWave :pixel-size="3" :wave-amplitude="0.26" :intensity="0.75" />
+      </div>
+
       <div class="app-bar">
         <RouterLink class="app-brand" :to="{ name: 'project-list' }">
           <img class="app-mark" src="/reqbridge-mark.png" alt="" aria-hidden="true" />
@@ -192,7 +198,29 @@ function toCrumb(item) {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--bg-300);
+  overflow: hidden;
 }
+
+/* 바 오른쪽 절반. 왼쪽은 로고와 경로가 앉는 자리라 비워 둔다.
+   경로가 길어져 넘어오더라도 왼쪽 끝을 길게 녹여 두어 글자에 무늬가 겹치지 않는다. */
+.app-deco {
+  position: absolute;
+  inset: 0 0 0 46%;
+  opacity: .34;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 46%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 46%, #000 88%, transparent);
+}
+
+/* 넓은 화면에서는 바가 가운데 1200px 안에서만 산다. 파도도 같은 폭 안에 가둔다. */
+@media (min-width: 1264px) {
+  .app-deco { right: calc((100% - var(--maxw)) / 2); }
+}
+
+/* 좁은 화면에서는 경로가 오른쪽까지 차 글자와 겹친다. */
+@media (max-width: 900px) { .app-deco { display: none; } }
+/* 움직임을 줄여 달라고 한 사용자에게는 그리지 않는다. */
+@media (prefers-reduced-motion: reduce) { .app-deco { display: none; } }
 
 /* 로고와 경로를 한 줄에 둔다. 두 줄로 쌓으면 업무 화면에서 상단 90px를 쓰는데,
    그중 오른쪽 절반이 통째로 비어 있었다. */
@@ -200,6 +228,8 @@ function toCrumb(item) {
    바가 「남은 폭」의 가운데로 가서 본문 기둥보다 40px 왼쪽에서 시작한다.
    상단 로고와 본문 제목의 왼쪽 변이 어긋나면 화면 전체가 흔들려 보인다. */
 .app-bar {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 16px;
