@@ -44,6 +44,7 @@ public class OpenAiWorkflowAnalyzer implements WorkflowAnalyzer {
 
 	public OpenAiWorkflowAnalyzer(String apiKey, String model, ObjectMapper json) {
 		this(apiKey, model, json, HttpClient.newBuilder()
+				.version(HttpClient.Version.HTTP_2)
 				.connectTimeout(Duration.ofSeconds(10))
 				.build());
 	}
@@ -71,16 +72,14 @@ public class OpenAiWorkflowAnalyzer implements WorkflowAnalyzer {
 
 		String systemPrompt = """
 				You are an expert software requirement analyst in ReqBridge.
-				Your mission is to extract individual requirements from the input document and identify ambiguities according to the 7 AmbiguityType standards.
-				
-				The 7 AmbiguityType standards:
+				Extract requirements and identify ambiguities according to 7 AmbiguityType standards:
 				- QUANTITY_MISSING: Missing numerical, volume, count, or size criteria (e.g., 'many users' -> How many?)
-				- PERFORMANCE_MISSING: Missing response time, throughput, latency, or deadline criteria (e.g., 'respond quickly' -> What time limit?)
-				- CONDITION_MISSING: Missing preconditions or specific environment conditions (e.g., 'if necessary')
-				- ACTOR_MISSING: Missing or vague actor/subject (e.g., 'system processes')
-				- SUCCESS_CRITERIA_MISSING: Missing success/completion verification criteria (e.g., 'processed normally')
-				- TERM_AMBIGUOUS: Vague, ambiguous, or multi-meaning terms (e.g., 'appropriate level')
-				- EXCEPTION_MISSING: Missing error, failure, or recovery handling procedures (e.g., 'in case of error')
+				- PERFORMANCE_MISSING: Missing response time, throughput, latency, or deadline (e.g., 'respond quickly' -> What time limit?)
+				- CONDITION_MISSING: Missing preconditions or specific environment conditions
+				- ACTOR_MISSING: Missing or vague actor/subject
+				- SUCCESS_CRITERIA_MISSING: Missing success/completion verification criteria
+				- TERM_AMBIGUOUS: Vague, ambiguous, or multi-meaning terms
+				- EXCEPTION_MISSING: Missing error, failure, or recovery handling procedures
 				
 				You MUST respond with a pure JSON object matching this exact schema:
 				{
@@ -91,8 +90,8 @@ public class OpenAiWorkflowAnalyzer implements WorkflowAnalyzer {
 				      "issues": [
 				        {
 				          "type": "QUANTITY_MISSING | PERFORMANCE_MISSING | CONDITION_MISSING | ACTOR_MISSING | SUCCESS_CRITERIA_MISSING | TERM_AMBIGUOUS | EXCEPTION_MISSING",
-				          "evidence": "string (specific reason why it is ambiguous in Korean)",
-				          "questionText": "string (clear clarification question in polite Korean to ask the customer)"
+				          "evidence": "string (concise reason in Korean, 1 sentence under 50 chars)",
+				          "questionText": "string (polite clarification question in Korean, 1 sentence under 60 chars)"
 				        }
 				      ]
 				    }
@@ -102,12 +101,12 @@ public class OpenAiWorkflowAnalyzer implements WorkflowAnalyzer {
 				Rules:
 				- sequenceNo starts at 1 and must be strictly sequential (1, 2, 3...).
 				- If a requirement has no ambiguities, the issues array must be empty [].
-				- All questions and evidence MUST be written in natural Korean.
+				- Keep evidence and questionText concise, clear, and in natural Korean. Avoid redundant explanation.
 				""";
 
 		String userPrompt = "Analyze the following requirements document and output JSON:\n\n" + input.content();
 
-		String rawJson = callOpenAi(systemPrompt, userPrompt);
+		String rawJson = callOpenAi(systemPrompt, userPrompt, 2500);
 		try {
 			return json.readValue(rawJson, DocumentAnalysisResult.class);
 		}
@@ -123,26 +122,28 @@ public class OpenAiWorkflowAnalyzer implements WorkflowAnalyzer {
 
 		String systemPrompt = """
 				You are an expert requirement clarification judge in ReqBridge.
-				Your task is to evaluate whether a customer's answer sufficiently resolves a specific ambiguity issue in a requirement.
+				Evaluate whether a customer's answer sufficiently resolves a specific ambiguity issue.
 				
 				Evaluation criteria:
-				- If the customer provided concrete, measurable, or specific criteria (e.g., exact numbers, specific thresholds, clear conditions) that resolve the issue, sufficient = true.
-				- If the answer is still vague, qualitative, or incomplete (e.g., 'many', 'as fast as possible', 'usual amount'), sufficient = false, and you MUST generate a more specific follow-up question (nextQuestionText).
+				- If the customer provided concrete, measurable criteria (e.g., exact numbers, specific thresholds) that resolve the issue, sufficient = true.
+				- If the answer is still vague or qualitative, sufficient = false, and generate a polite follow-up question.
 				
 				You MUST respond with a pure JSON object matching this exact schema:
 				{
 				  "sufficient": true,
-				  "reason": "string (clear explanation in Korean of why the answer is judged sufficient or insufficient)",
+				  "reason": "string (concise explanation in Korean, 1 sentence under 80 chars)",
 				  "nextQuestionText": null
 				}
 				OR
 				{
 				  "sufficient": false,
-				  "reason": "string (clear explanation in Korean of what is still missing)",
-				  "nextQuestionText": "string (polite follow-up question in Korean asking for the missing criteria)"
+				  "reason": "string (concise explanation in Korean, 1 sentence under 80 chars)",
+				  "nextQuestionText": "string (polite follow-up question in Korean, 1 sentence under 60 chars)"
 				}
 				
-				CRITICAL: When sufficient is true, nextQuestionText MUST be null. When sufficient is false, nextQuestionText MUST be a non-empty string.
+				CRITICAL:
+				- reason MUST be a single concise Korean sentence.
+				- When sufficient is true, nextQuestionText MUST be null. When false, nextQuestionText MUST be 1 concise question.
 				""";
 
 		StringBuilder userPrompt = new StringBuilder();
@@ -160,7 +161,7 @@ public class OpenAiWorkflowAnalyzer implements WorkflowAnalyzer {
 			}
 		}
 
-		String rawJson = callOpenAi(systemPrompt, userPrompt.toString());
+		String rawJson = callOpenAi(systemPrompt, userPrompt.toString(), 250);
 		try {
 			return json.readValue(rawJson, AnswerAssessment.class);
 		}
@@ -176,13 +177,13 @@ public class OpenAiWorkflowAnalyzer implements WorkflowAnalyzer {
 
 		String systemPrompt = """
 				You are an expert requirement specification engineer in ReqBridge.
-				Your task is to rewrite a software requirement into a clear, measurable, and testable specification by integrating all clarified customer answers.
+				Rewrite a software requirement into a clear, measurable, and testable specification by integrating all clarified customer answers.
 				
 				Guidelines:
 				- Combine the original intent with all specific criteria (numbers, latency, conditions, actors) resolved in the Q&A.
 				- If a rejection reason is provided, incorporate the feedback directly into the revision.
 				- Keep the style formal and declarative in Korean (e.g., '~해야 한다.').
-				- Do not omit existing non-ambiguous requirements from the original text.
+				- Keep proposedText concise and focused without unnecessary preamble or filler.
 				
 				You MUST respond with a pure JSON object matching this exact schema:
 				{
@@ -206,7 +207,7 @@ public class OpenAiWorkflowAnalyzer implements WorkflowAnalyzer {
 			userPrompt.append(input.rejectionReason()).append("\n");
 		}
 
-		String rawJson = callOpenAi(systemPrompt, userPrompt.toString());
+		String rawJson = callOpenAi(systemPrompt, userPrompt.toString(), 400);
 		try {
 			return json.readValue(rawJson, RevisionProposal.class);
 		}
@@ -225,10 +226,11 @@ public class OpenAiWorkflowAnalyzer implements WorkflowAnalyzer {
 		}
 	}
 
-	private String callOpenAi(String systemPrompt, String userPrompt) {
+	private String callOpenAi(String systemPrompt, String userPrompt, int maxCompletionTokens) {
 		Map<String, Object> requestBody = new HashMap<>();
 		requestBody.put("model", this.model);
 		requestBody.put("temperature", 0.1);
+		requestBody.put("max_completion_tokens", maxCompletionTokens);
 		requestBody.put("response_format", Map.of("type", "json_object"));
 
 		List<Map<String, String>> messages = new ArrayList<>();

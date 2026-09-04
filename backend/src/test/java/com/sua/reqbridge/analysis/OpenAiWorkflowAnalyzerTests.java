@@ -167,4 +167,36 @@ class OpenAiWorkflowAnalyzerTests {
 				.isInstanceOf(AiOutputInvalidException.class)
 				.hasMessageContaining("HTTP 401");
 	}
+
+	@Test
+	@DisplayName("요청 헤더 및 HTTP POST 메서드가 올바르게 전송된다")
+	@SuppressWarnings("unchecked")
+	void verifiesHttpRequestConfiguration() throws IOException, InterruptedException {
+		String openAiResponseBody = """
+				{
+				  "choices": [
+				    {
+				      "message": {
+				        "content": "{\\"proposedText\\":\\"수정안\\"}"
+				      }
+				    }
+				  ]
+				}
+				""";
+
+		org.mockito.ArgumentCaptor<HttpRequest> requestCaptor = org.mockito.ArgumentCaptor.forClass(HttpRequest.class);
+		when(mockHttpResponse.statusCode()).thenReturn(200);
+		when(mockHttpResponse.body()).thenReturn(openAiResponseBody);
+		when(mockHttpClient.send(requestCaptor.capture(), any(HttpResponse.BodyHandler.class)))
+				.thenReturn(mockHttpResponse);
+
+		OpenAiWorkflowAnalyzer analyzer = new OpenAiWorkflowAnalyzer("sk-test", "gpt-4o-mini", objectMapper, mockHttpClient);
+		analyzer.generateRevision(new RevisionGenerationInput(1L, "원문", List.of(), null));
+
+		HttpRequest capturedRequest = requestCaptor.getValue();
+		assertThat(capturedRequest.headers().firstValue("Authorization")).contains("Bearer sk-test");
+		assertThat(capturedRequest.method()).isEqualTo("POST");
+		assertThat(capturedRequest.headers().firstValue("Content-Type")).contains("application/json");
+	}
 }
+
