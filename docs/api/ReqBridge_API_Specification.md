@@ -1,9 +1,9 @@
 # ReqBridge API 명세서
 
 - 관리 책임자: 신형섭
-- API 계약 버전: 0.4.0
-- 개정일: 2026-09-03
-- 적용 범위: P1 업무 API 17개와 P2 Preview API 2개를 사용하는 백엔드·프론트엔드의 외부 HTTP 계약
+- API 계약 버전: 0.5.0
+- 개정일: 2026-09-04
+- 적용 범위: P1 업무 API 19개와 P2 Preview API 2개를 사용하는 백엔드·프론트엔드의 외부 HTTP 계약
 - 검토: 프론트엔드 담당자, 한형준
 - 기준: ReqBridge 백엔드 협업 계획, ReqBridge 팀 주제 제안서, Mini-project 교육 자료 및 이후 사용자 결정
 - 상태: 공식 API 명세이자 팀 공통 구현·검증 기준. 모든 Endpoint의 구현 또는 배포가 완료되었다는 뜻은 아니다.
@@ -72,6 +72,7 @@ Java의 일반 length/@Size와 JavaScript length만으로 코드 포인트 제�
 
 | 단계 | Method | Endpoint | 기능 | 구현 담당 |
 | --- | --- | --- | --- | --- |
+| P1 | GET | `/api/health` | 서버 상태 확인 | 한형준 |
 | P1 | POST | `/api/projects` | 프로젝트 생성 | 한형준 |
 | P1 | GET | `/api/projects` | 프로젝트 목록 | 한형준 |
 | P1 | GET | `/api/projects/{projectId}` | 프로젝트 상세 | 한형준 |
@@ -89,6 +90,7 @@ Java의 일반 length/@Size와 JavaScript length만으로 코드 포인트 제�
 | P1 | POST | `/api/clarifications/{clarificationId}/answers` | 답변 저장·재판정 접수 | 신형섭 |
 | P1 | POST | `/api/requirements/{requirementId}/revisions` | 거절 이후 수정안 재생성 접수 | 신형섭 |
 | P1 | POST | `/api/revisions/{revisionId}/review` | 수정안 승인·거절 | 신형섭 |
+| P1 | POST | `/api/requirements/{requirementId}/confirm` | EXTRACTED 요구사항 직접 승인 | 신형섭 |
 | P2 | GET | `/api/documents/{documentId}/previews/customer` | 고객 질문서 Preview | 신형섭 |
 | P2 | GET | `/api/documents/{documentId}/previews/developer` | 개발팀용 Preview | 신형섭 |
 
@@ -104,6 +106,7 @@ Java의 일반 length/@Size와 JavaScript length만으로 코드 포인트 제�
 | IssueStatus | `OPEN`, `RESOLVED` |
 | ClarificationStatus | `WAITING`, `ANSWERED`, `RESOLVED` |
 | RevisionStatus | `PROPOSED`, `APPROVED`, `REJECTED` |
+| RevisionSource | `AI`, `MANUAL` |
 | AmbiguityType | `QUANTITY_MISSING`, `PERFORMANCE_MISSING`, `CONDITION_MISSING`, `ACTOR_MISSING`, `SUCCESS_CRITERIA_MISSING`, `TERM_AMBIGUOUS`, `EXCEPTION_MISSING` |
 
 `EXTRACTED`는 최초 분석으로 요구사항만 추출된 상태, `AMBIGUOUS`는 불명확성 문제가 열린 상태, `CLARIFYING`은 질문·답변·재판정 진행 또는 거절 후 수정안 재생성 대기 상태다. `IN_REVIEW`는 제안 수정안 검토 대기, `CONFIRMED`는 담당자 승인 완료다. 작업 `COMPLETED`가 요구사항 `CONFIRMED`를 의미하지 않는다. 처음부터 명확한 요구사항도 수정안을 제안한 뒤 `IN_REVIEW`로 보낸다.
@@ -138,6 +141,24 @@ Java의 일반 length/@Size와 JavaScript length만으로 코드 포인트 제�
 
 JSON은 설명용 필드 생략 없이 제시했다. 각 API 예시는 해당 API가 호출되는 시점의 독립 스냅샷이다. 이어지는 전체 흐름의 버전·ID 연결은 8절을 따른다. 공통 오류 본문은 7절을 참고한다.
 
+
+### 5.0. 서버 상태 확인
+
+`GET /api/health` · 한형준 · P1
+
+서버 기동 상태를 확인한다. 인증 없이 접근 가능하다.
+
+요청 본문: 없음.
+
+성공 응답 `200`:
+
+```json
+{
+  "status": "OK"
+}
+```
+
+이 응답은 공통 `{ "data": ... }` 래퍼를 사용하지 않는다. HealthController가 직접 Map을 반환한다.
 
 ### 5.1. 프로젝트 생성
 
@@ -747,6 +768,8 @@ CLARIFYING, 모든 문제 RESOLVED, 활성 작업/PROPOSED 수정안 없음, 거
 
 `POST /api/revisions/{revisionId}/review` · 신형섭 · P1
 
+응답의 Revision에는 `source` 필드가 포함된다. 값은 `AI`(분석에 의한 자동 생성) 또는 `MANUAL`(직접 승인에 의한 생성)이다.
+
 승인과 확정본 저장은 한 트랜잭션. 미해결(OPEN) 문제/활성 작업/오래된 버전/현재 제안 아님은 409. APPROVE에는 rejectionReason을 보내지 않는다. REJECT에는 사유 필수. 최초 거절은 사유 저장·CLARIFYING 전환·contentVersion 1 증가를 같은 트랜잭션에서 수행한다. APPROVE는 버전을 유지한다. 같은 결정·동일 사유 재전송은 기존 결정 반환, 결정/사유 변경은 409. 현재 Requirement와 해당 Revision을 응답한다.
 
 요청 본문:
@@ -768,6 +791,7 @@ CLARIFYING, 모든 문제 RESOLVED, 활성 작업/PROPOSED 수정안 없음, 거
       "requirementId": 401,
       "revisionNo": 1,
       "text": "시스템은 최대 동시 사용자 3,000명의 상품 조회 부하 시험을 10분간 수행할 때 p95 응답 시간 2초 이하, 성공 응답 비율 99.9% 이상을 만족해야 한다.",
+      "source": "AI",
       "status": "APPROVED",
       "inputContentVersion": 4,
       "basedOnClarificationIds": [
@@ -815,6 +839,7 @@ CLARIFYING, 모든 문제 RESOLVED, 활성 작업/PROPOSED 수정안 없음, 거
       "requirementId": 401,
       "revisionNo": 1,
       "text": "시스템은 최대 동시 사용자 3,000명의 상품 조회 부하 시험을 10분간 수행할 때 p95 응답 시간 2초 이하, 성공 응답 비율 99.9% 이상을 만족해야 한다.",
+      "source": "AI",
       "status": "REJECTED",
       "inputContentVersion": 4,
       "basedOnClarificationIds": [
@@ -839,6 +864,56 @@ CLARIFYING, 모든 문제 RESOLVED, 활성 작업/PROPOSED 수정안 없음, 거
   }
 }
 ```
+
+### 5.16.1. EXTRACTED 요구사항 직접 승인
+
+`POST /api/requirements/{requirementId}/confirm` · 신형섭 · P1
+
+불명확성 문제가 없는 EXTRACTED 상태의 요구사항을 수정안 생성·검토 없이 직접 승인한다. 서버가 원문을 그대로 확정본으로 복사하는 MANUAL source의 수정안을 자동 생성하고 즉시 APPROVED로 전환한다. 이미 CONFIRMED인 동일 요청은 멱등하게 기존 결과를 반환한다.
+
+EXTRACTED가 아닌 상태, 미해결 문제/대기 질문 존재, 활성 분석 작업 존재, PROPOSED 수정안 존재, 이미 approvedRevisionId/confirmedText가 있는 경우에는 409 `REQUIREMENT_NOT_DIRECTLY_CONFIRMABLE`을 반환한다.
+
+요청 본문:
+
+```json
+{
+  "expectedContentVersion": 1
+}
+```
+
+성공 응답 `200` · `ConfirmResult`:
+
+```json
+{
+  "data": {
+    "requirement": {
+      "id": 401,
+      "documentId": 101,
+      "analysisId": 301,
+      "sequenceNo": 1,
+      "originalText": "시스템은 많은 사용자의 동시 상품 조회 요청에 빠르게 응답해야 한다.",
+      "status": "CONFIRMED",
+      "contentVersion": 1,
+      "approvedRevisionId": 701,
+      "confirmedText": "시스템은 많은 사용자의 동시 상품 조회 요청에 빠르게 응답해야 한다."
+    },
+    "revision": {
+      "id": 701,
+      "requirementId": 401,
+      "revisionNo": 1,
+      "text": "시스템은 많은 사용자의 동시 상품 조회 요청에 빠르게 응답해야 한다.",
+      "source": "MANUAL",
+      "status": "APPROVED",
+      "inputContentVersion": 1,
+      "basedOnClarificationIds": [],
+      "rejectionReason": null,
+      "acceptanceCriteria": []
+    }
+  }
+}
+```
+
+`ConfirmResult`의 필드 순서는 `ReviewResult`와 다르다. `requirement`가 먼저, `revision`이 뒤에 온다.
 
 ### 5.17. 고객 질문서 Preview
 
@@ -1235,6 +1310,7 @@ P3 예약 구조. P1/P2 응답에서는 acceptanceCriteria=[]를 반환한다.
 | `requirementId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 | `revisionNo` | integer | 필수 | 불가 | 요구사항 안의 수정안 순번 |
 | `text` | string | 필수 | 불가 | - |
+| `source` | RevisionSource | 필수 | 불가 | `AI`: Mock/LLM 분석 결과로 생성, `MANUAL`: 직접 승인 시 원문 복사로 생성 |
 | `status` | RevisionStatus | 필수 | 불가 | - |
 | `inputContentVersion` | integer | 필수 | 불가 | 수정안 생성 당시 불변 버전. 예: v4 수정안을 거절해 요구사항이 v5가 되어도 기존 수정안은 4 유지. |
 | `basedOnClarificationIds` | array<integer> | 필수 | 불가 | - |
@@ -1350,6 +1426,21 @@ contentVersion은 현재 요구사항 버전. analysis.inputContentVersion은 �
 | --- | --- | --- | --- | --- |
 | `revision` | Revision | 필수 | 불가 | - |
 | `requirement` | Requirement | 필수 | 불가 | - |
+
+### ConfirmRequest
+
+| 필드 | 타입 | 필수 | null | 조건·의미 |
+| --- | --- | --- | --- | --- |
+| `expectedContentVersion` | integer | 필수 | 불가 | 현재 요구사항의 contentVersion |
+
+### ConfirmResult
+
+`ReviewResult`와 동일한 필드를 포함하지만 필드 순서가 다르다. `requirement`가 먼저, `revision`이 뒤에 온다.
+
+| 필드 | 타입 | 필수 | null | 조건·의미 |
+| --- | --- | --- | --- | --- |
+| `requirement` | Requirement | 필수 | 불가 | - |
+| `revision` | Revision | 필수 | 불가 | - |
 
 ### CustomerQuestion
 
@@ -1468,6 +1559,14 @@ confirmedRequirements에는 APPROVED 수정안만 포함. evidenceAnswers는 해
 
 ## 11. 개정 내역과 검증 기준
 
+0.5.0은 백엔드 코드 기준 분석을 통해 다음을 반영했다.
+
+- `GET /api/health` Endpoint 추가: `{ "status": "OK" }`를 반환하며 공통 응답 래퍼를 사용하지 않는다.
+- `POST /api/requirements/{requirementId}/confirm` Endpoint 추가: EXTRACTED 상태의 요구사항을 직접 승인한다. 서버가 원문을 확정본으로 복사하는 MANUAL source 수정안을 자동 생성·승인하고 CONFIRMED로 전환한다.
+- `RevisionSource` enum 추가 (`AI`, `MANUAL`): 수정안이 분석(AI)으로 생성되었는지 직접 승인(MANUAL)으로 생성되었는지 구분한다.
+- Revision 응답에 `source` 필드 추가: `RevisionController.RevisionView`와 `WorkflowController.RevisionView` 모두에 포함된다.
+- Endpoint 수를 P1 19개·P2 2개로 갱신했다.
+
 0.4.0은 기존 Analysis·Requirement·Workflow Endpoint의 경로·JSON 구조·상태·버전 규칙을 유지하면서 PDF 파일 업로드를 추가했다. `DocumentSourceType`에 `FILE`을 추가하고 기존 TEXT 입력과 병행한다. PDF 원본은 Supabase Storage에, 추출 텍스트는 기존 `Document.content`에 저장하며 Storage 내부 정보와 PostgreSQL binary는 외부 계약에 포함하지 않는다.
 
 0.3.0은 0.2.0의 Endpoint·HTTP 메서드·JSON 구조·담당자를 유지하면서 RequirementStatus를 첨부된 개정 DBML 수정안 기준 5값으로 변경했다. `OPEN`을 제거하고 `EXTRACTED`, `AMBIGUOUS`, `CLARIFYING`을 추가했으며 관련 상태 전이와 예시를 함께 수정했다.
@@ -1489,3 +1588,5 @@ API의 구조 제약은 [OpenAPI 3.0.3 명세](https://spec.openapis.org/oas/v3.
 0.3.0 문서 검증 결과(2026-09-02): Markdown의 JSON 코드 블록 28개를 파싱했고, 공식화 전 문서와 비교해 필드·타입 구조가 유지됐음을 확인했다. Endpoint는 P1 16개·P2 2개이며 HTTP 메서드·경로·담당자가 유지됐다. JSON의 `OPEN` 값은 IssueStatus에만 남아 있다. OpenAPI YAML과 DB 수정 요청서는 저장소에 없어 문법·참조·스키마 일치 및 `/api` 중복 여부를 검증하지 않았다. 애플리케이션·DB 테스트는 문서 작업 범위 밖이라 실행하지 않았다.
 
 0.4.0 문서 검증 결과(2026-09-03): Markdown JSON 코드 블록 파싱, P1 17개·P2 2개 Endpoint, `DocumentSourceType`의 `TEXT | FILE`, PDF 업로드의 입력·오류·10MB 제한과 Spring multipart 설정 일치를 검사한다. OpenAPI YAML과 `contract-changes.md`는 저장소에 없어 수정하거나 새로 만들지 않았다. 실제 PDF 추출·Storage·DB·HTTP 통합 테스트는 구현 후 별도 검증 대상이다.
+
+0.5.0 문서 검증 결과(2026-09-04): 백엔드 Java 소스 코드의 Controller·Service·Entity를 직접 분석하여 실제 구현된 API와 명세의 차이를 반영했다. HealthController(`GET /api/health`), RevisionController의 directConfirm(`POST /api/requirements/{requirementId}/confirm`), RequirementRevision 엔티티의 `source` 필드(`RevisionSource` enum), RevisionController·WorkflowController의 RevisionView에 포함된 `source` 필드를 확인하고 명세에 추가했다. Endpoint는 P1 19개·P2 2개이다.
