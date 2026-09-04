@@ -5,6 +5,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="ReqBridge frontend scaffold" />
     <title>ReqBridge</title>
+
+    <!-- 탭 아이콘. 로고 마크를 정사각 캔버스 가운데에 놓아 만들었다.
+         원본(240x205)이 정사각이 아니라 그대로 걸면 탭에서 눌리거나 치우친다. -->
+    <!-- SVG 를 먼저 둔다. 지원 브라우저는 이걸 쓰고, 벡터라 배율에 안 깨진다. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+
+    <!--
+      서체는 Pretendard 하나만 쓴다.
+
+      예전에는 넷이었다 — 영문 대제목에 Archivo, 제목 한글에 SUITE, 본문에 Pretendard,
+      계측 라벨과 숫자에 JetBrains Mono. 역할을 나눠 준 것이지만 화면에서는 반대로
+      작동했다. 화면 제목이 「요구사항 검토」처럼 전부 한글이 된 뒤로 Archivo는 쓰이지
+      않고, JetBrains Mono는 한글 글리프가 없어 라벨과 본문이 Pretendard로 폴백하면서
+      등폭 서체의 넓은 자간만 남았다. 그래서 「원 문」 「1 회 차」처럼 벌어져, 업무 화면의
+      글이 코드처럼 읽혔다.
+
+      한 벌로 두면 제목·본문·라벨·숫자가 같은 서체의 다른 굵기로 갈린다. 숫자 자리수는
+      서체를 바꾸지 않고 font-variant-numeric: tabular-nums로 맞춘다.
+    -->
+    <link rel="stylesheet" as="style" crossorigin
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
   </head>
   <body>
     <div id="app"></div>

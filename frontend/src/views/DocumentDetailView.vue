@@ -10,6 +10,11 @@ import { getDocument } from '@/api/documents'
 import { listRequirements } from '@/api/requirements'
 import AnalysisFailureBanner from '@/components/common/AnalysisFailureBanner.vue'
 import ErrorMessage from '@/components/common/ErrorMessage.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
+import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import PageHero from '@/components/common/PageHero.vue'
+import PillButton from '@/components/common/PillButton.vue'
+import SectionLabel from '@/components/common/SectionLabel.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import { useActiveAnalysisLock } from '@/composables/useActiveAnalysisLock'
 import { useAnalysisPoller } from '@/composables/useAnalysisPoller'
@@ -78,24 +83,6 @@ const analyzeButtonLabel = computed(() => {
 const detectedIssueCount = computed(
   () => activeAnalysis.value?.result?.issueIds?.length ?? 0,
 )
-
-const displayedRequirements = computed(() => {
-  const reviewStatuses = new Set([
-    RequirementStatus.AMBIGUOUS,
-    RequirementStatus.CLARIFYING,
-  ])
-
-  return [...requirements.value].sort((a, b) => {
-    const aPriority = reviewStatuses.has(a.status) ? 0 : 1
-    const bPriority = reviewStatuses.has(b.status) ? 0 : 1
-
-    if (aPriority !== bPriority) {
-      return aPriority - bPriority
-    }
-
-    return a.sequenceNo - b.sequenceNo
-  })
-})
 
 async function loadRequirements() {
   const data = await listRequirements(documentId.value)
@@ -224,22 +211,46 @@ async function onRetry() {
   }
 }
 
+/** 히어로에 얹는 요약. 표시용이라 조회 로직과 무관하다. */
+/**
+ * 이 요구사항이 사람의 답변을 기다리는가. 목록에서 「먼저 볼 것」을 가르는 기준이다.
+ * 확정·추출 완료는 읽기만 하면 되고, 불명확성이 걸린 것은 들어가서 답해야 한다.
+ */
+function needsAttention(status) {
+  return status === RequirementStatus.AMBIGUOUS || status === RequirementStatus.CLARIFYING
+}
+
+/**
+ * 답변이 필요한 요구사항을 목록 위로 올린다. 정상과 불명확이 같은 모양으로 섞여 있으면
+ * 무엇을 먼저 봐야 할지 알려면 전체를 하나씩 열어봐야 한다
+ * (프론트엔드-추가-요청사항 4.1).
+ *
+ * **순번은 다시 매기지 않는다.** 5번이 1번보다 위에 와도 그 항목은 여전히 문서의
+ * 5번째 요구사항이다. 화면 사정으로 번호를 바꾸면 원문과 대조할 수 없게 된다.
+ */
+const displayedRequirements = computed(() => {
+  return [...requirements.value].sort((a, b) => {
+    const priority = Number(needsAttention(b.status)) - Number(needsAttention(a.status))
+    return priority !== 0 ? priority : a.sequenceNo - b.sequenceNo
+  })
+})
+
+const chips = computed(() => [
+  { value: String(requirements.value.length), label: '요구사항' },
+  {
+    value: String(
+      requirements.value.filter((r) => r.status === RequirementStatus.CONFIRMED).length,
+    ),
+    label: '확정',
+  },
+  { value: String(detectedIssueCount.value), label: '불명확성' },
+])
+
 function openRequirement(requirementId) {
   router.push({
     name: 'requirement-workflow',
     params: { requirementId: String(requirementId) },
   })
-}
-
-function requirementActionLabel(status) {
-  if (
-    status === RequirementStatus.AMBIGUOUS ||
-    status === RequirementStatus.CLARIFYING
-  ) {
-    return '불명확성 확인'
-  }
-
-  return '요구사항 보기'
 }
 
 onMounted(() => {
@@ -248,238 +259,180 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="doc-page">
-    <header class="doc-header">
-      <div>
-        <h1>{{ document?.title ?? '문서' }}</h1>
-        <p v-if="latestAnalysisStatus" class="doc-meta">
-          <StatusBadge kind="analysis" :value="latestAnalysisStatus" />
-        </p>
-      </div>
-      <!-- Preview 진입은 C(P2) 몫으로 비어 있던 자리다 (인계서 4.7). -->
-      <RouterLink class="preview-link" :to="{ name: 'document-preview', params: { documentId: String(documentId) } }">
-        Preview 열기
-      </RouterLink>
-    </header>
+  <div class="page">
+    <PageHero
+      num="03" eyebrow="문서 상세" watermark="D" :chips="chips"
+    >
+      <template #title>{{ document?.title ?? '문서' }}</template>
+      <template #actions>
+        <RouterLink :to="{ name: 'document-preview', params: { documentId: String(documentId) } }">
+          <PillButton variant="quiet">미리보기</PillButton>
+        </RouterLink>
+      </template>
+    </PageHero>
 
-    <ErrorMessage
-      v-if="hasError"
-      :message="message"
-      :field-errors="fieldErrors"
-    />
+    <ErrorMessage v-if="hasError" :message="message" :field-errors="fieldErrors" />
 
-    <p v-if="loading">불러오는 중…</p>
+    <LoadingSpinner v-if="loading" />
 
-    <template v-else-if="document">
-      <section class="panel">
-        <h2>원문</h2>
-        <pre class="content">{{ document.content }}</pre>
-        <div class="actions">
-          <button
-            type="button"
-            class="btn-primary"
-            :disabled="isAnalyzeDisabled"
-            @click="onAnalyze"
-          >
-            {{ analyzeButtonLabel }}
-          </button>
+    <div v-else-if="document" class="grid12 split at-4">
+      <!-- 참조 열: 원문과 분석 -->
+      <div class="left stickycol" data-reveal>
+        <!-- 원문은 「읽는 곳」이라 한 톤 내린다. 아래 분석 카드(버튼이 있는 「하는 곳」)와
+             같은 흰 판이면 눈이 어디부터 봐야 할지 알 수 없다. -->
+        <div class="card pad quiet">
+          <div class="cardhead">
+            <span class="eb">원문</span>
+            <span class="mi len"><b class="fig">{{ [...(document.content ?? '')].length.toLocaleString() }}</b>자</span>
+          </div>
+          <p class="source">{{ document.content }}</p>
         </div>
-      </section>
 
-      <AnalysisFailureBanner
-        v-if="failedAnalysis"
-        :code="failedAnalysis.error?.code ?? ''"
-        :message="failedAnalysis.error?.message ?? '분석에 실패했습니다.'"
-        @retry="onRetry"
-      />
+        <div class="card pad">
+          <div class="cardhead">
+            <span class="eb">분석</span>
+            <StatusBadge v-if="latestAnalysisStatus" kind="analysis" :value="latestAnalysisStatus" />
+          </div>
 
-      <section class="panel">
-        <h2>요구사항 목록</h2>
-        <p v-if="isAnalyzed" class="issue-summary">
-          이번 분석에서 확인된 불명확성 {{ detectedIssueCount }}건. 유형과 근거는 요구사항
-          화면에서 확인합니다.
-        </p>
-        <p v-if="requirements.length === 0" class="empty">
-          아직 추출된 요구사항이 없습니다. 분석을 실행해 주세요.
-        </p>
-        <ul v-else class="req-list">
-          <li
+          <div v-if="isPolling || isLocked" class="sysnote" style="--tone: var(--blue-so); --tone-ink: var(--blue-tx)">
+            <span class="scan" aria-hidden="true" />
+            <div class="body">
+              <div class="head"><span class="k">분석 처리 중</span></div>
+              <p class="msg">끝나면 요구사항이 오른쪽에 나타납니다.</p>
+            </div>
+          </div>
+
+          <p v-else class="mi hint">
+            <template v-if="isAnalyzed">
+              확인된 불명확성 <b class="fig num">{{ detectedIssueCount }}</b>건
+            </template>
+            <template v-else>아직 분석하지 않았습니다.</template>
+          </p>
+
+          <div class="btnrow">
+            <PillButton
+              variant="primary" :loading="isPolling"
+              :disabled="isAnalyzeDisabled" @click="onAnalyze"
+            >{{ analyzeButtonLabel }}</PillButton>
+          </div>
+        </div>
+
+        <AnalysisFailureBanner
+          v-if="failedAnalysis"
+          :code="failedAnalysis.error?.code ?? ''"
+          :message="failedAnalysis.error?.message ?? '분석에 실패했습니다.'"
+          @retry="onRetry"
+        />
+      </div>
+
+      <!-- 작업 열: 요구사항 목록 -->
+      <div class="right" data-reveal>
+        <div class="card list" data-reveal-stagger>
+          <SectionLabel text="요구사항" :count="requirements.length" />
+
+          <button
             v-for="requirement in displayedRequirements"
             :key="requirement.id"
-            class="req-item"
+            type="button"
+            class="rrow row stagger-child"
+            @click="openRequirement(requirement.id)"
           >
-            <button
-              type="button"
-              class="req-button"
-              @click="openRequirement(requirement.id)"
-            >
-              <div class="req-top">
-                <span class="req-code">요구사항 {{ requirement.sequenceNo }}</span>
-                <StatusBadge kind="requirement" :value="requirement.status" />
+            <div class="rhead">
+              <span class="fig seq">#{{ requirement.sequenceNo }}</span>
+              <div class="rbody">
+                <div class="rtext">{{ requirement.originalText }}</div>
+                <div v-if="requirement.confirmedText" class="mi confirmed">
+                  확정본 — {{ requirement.confirmedText }}
+                </div>
               </div>
-              <p class="req-text">{{ requirement.originalText }}</p>
-              <span class="req-link">{{ requirementActionLabel(requirement.status) }} →</span>
-            </button>
-          </li>
-        </ul>
-      </section>
-    </template>
-  </section>
+            </div>
+            <div class="rmeta">
+              <StatusBadge kind="requirement" :value="requirement.status" />
+              <span class="fig ver">v{{ requirement.contentVersion }}</span>
+              <!-- 모든 행의 동작이 화살표 하나로 같으면 무엇을 먼저 봐야 할지 알 수 없다.
+                   답변이 필요한 것과 그냥 읽는 것을 문구로 가른다
+                   (프론트엔드-추가-요청사항 4.1). -->
+              <span class="mi act" :class="{ needs: needsAttention(requirement.status) }">
+                {{ needsAttention(requirement.status) ? '불명확성 확인' : '요구사항 보기' }}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="arrow">
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </span>
+            </div>
+          </button>
+
+          <EmptyState
+            v-if="requirements.length === 0"
+            title="아직 요구사항이 없습니다"
+            description="왼쪽에서 분석을 시작하면 요구사항이 추출됩니다."
+          />
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.doc-page {
-  max-width: 880px;
+/* 참조 4 : 주 작업 8. 전 화면이 같은 비율을 쓴다. */
+/* 요구사항이 수십 건이면 목록을 훑는 내내 원문이 필요하다. 참조 기둥은 따라오게 둔다. */
+.left { grid-column: span 4; display: flex; flex-direction: column; gap: 18px; }
+.right { grid-column: span 8; }
+
+@media (max-width: 900px) {
+  .left, .right { grid-column: span 12; }
 }
 
-.doc-header {
+.len { font-size: var(--fs-micro); color: var(--fg-500); }
+.len b { font-weight: 700; color: var(--fg-800); }
+.source { margin: 0; font-size: var(--fs-sm); line-height: 1.9; color: var(--fg-800); white-space: pre-wrap; word-break: keep-all; }
+/* 진행 중 알림은 먹판(.sysnote)이라 여기서는 여백만 잡는다. */
+.sysnote { margin-bottom: 14px; }
+.hint { font-size: var(--fs-sm); color: var(--fg-600); line-height: 1.7; }
+/* 문장 안의 수치. 문장은 낮추고 숫자만 세운다 — 알고 싶은 것은 「몇 건인가」다. */
+.hint .num { font-size: var(--fs-h3); font-weight: 800; color: var(--accent-700); }
+.btnrow { display: flex; gap: 8px; margin: 14px 0 2px; }
+
+/* 한 줄에 여러 칼럼을 밀어넣으면 본문이 눌려 글자가 세로로 흐른다.
+   본문은 위 한 줄을 통째로 쓰고, 계측값(상태·버전)은 아래 줄로 내린다. */
+.rrow {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.preview-link {
-  padding: 8px 16px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #1d4ed8;
-  font-size: 0.875rem;
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.preview-link:hover {
-  border-color: #93c5fd;
-  background: #eff6ff;
-}
-
-.doc-header h1 {
-  margin: 0 0 6px;
-  font-size: 1.5rem;
-}
-
-.doc-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 20px;
-  color: #64748b;
-  font-size: 0.9rem;
-}
-
-.panel {
-  margin-bottom: 20px;
-  padding: 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  background: #ffffff;
-}
-
-.panel h2 {
-  margin: 0 0 12px;
-  font-size: 1rem;
-}
-
-.content {
-  margin: 0;
-  padding: 12px;
-  border-radius: 8px;
-  background: #f8fafc;
-  color: #334155;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.85rem;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.actions {
-  margin-top: 12px;
-}
-
-.btn-primary {
-  padding: 8px 14px;
-  border: none;
-  border-radius: 8px;
-  background: #2563eb;
-  color: #ffffff;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.empty {
-  margin: 0;
-  color: #94a3b8;
-  font-size: 0.9rem;
-}
-
-.req-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.req-item + .req-item {
-  margin-top: 10px;
-}
-
-.req-button {
-  display: block;
+  flex-direction: column;
+  gap: 10px;
   width: 100%;
-  padding: 12px 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #f8fafc;
+  padding: 16px 0 17px;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: none;
   text-align: left;
+  color: inherit;
+  font: inherit;
   cursor: pointer;
+  transition: background-color .25s var(--ease);
 }
 
-.req-button:hover {
-  border-color: #93c5fd;
-  background: #eff6ff;
-}
+.rrow:hover { background: var(--bg-100); }
 
-.req-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
+.rhead { display: grid; grid-template-columns: 38px minmax(0, 1fr) 20px; gap: 12px; align-items: start; }
+.rbody { min-width: 0; }
+.rmeta { display: flex; align-items: center; gap: 12px; padding-left: 50px; flex-wrap: wrap; }
+/* 행의 동작 문구는 줄 끝으로 민다 — 배지·버전과 붙어 있으면 상태의 일부로 읽힌다. */
+.act {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-left: auto;
+  white-space: nowrap;
+  /* 행이 하는 일은 「누를 수 있는 것」으로 보여야 한다. 회색 400은 설명글과 같은
+     무게라 눌러도 되는지 알 수 없었다. 브랜드 남색에 굵기를 준다. */
+  font-size: var(--fs-sm); font-weight: 700; color: var(--accent-700);
+  transition: color .25s var(--ease);
 }
-
-.req-code {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: #0f172a;
-  letter-spacing: 0.01em;
-}
-
-.req-text {
-  margin: 0 0 10px;
-  color: #334155;
-  font-size: 0.95rem;
-  line-height: 1.55;
-}
-
-.issue-summary {
-  margin: 0 0 12px;
-  color: #b45309;
-  font-size: 0.85rem;
-}
-
-.req-link {
-  color: #2563eb;
-  font-size: 0.8rem;
-  font-weight: 600;
-}
+/* 답변이 필요한 행만 동작 문구에 색을 준다. 왼쪽 색띠 대신 「할 일」 자체를 짚는다. */
+.act.needs { color: var(--amber-tx); font-weight: 600; }
+.rrow:hover .act { color: var(--primary-600); }
+.rrow:hover .arrow { transform: translateX(3px); }
+.arrow { transition: transform .3s var(--ease); }
+.seq { font-size: 17px; color: var(--accent-700); line-height: 1.5; }
+.rtext { font-size: var(--fs-sm); line-height: 1.7; color: var(--fg-950); word-break: keep-all; }
+.confirmed { margin-top: 7px; font-size: var(--fs-micro); color: var(--green-tx); line-height: 1.6; word-break: keep-all; }
+.ver { font-size: 14px; color: var(--fg-600); }
 </style>

@@ -13,7 +13,12 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { getCustomerPreview, getDeveloperPreview } from '@/api/previews'
 import ErrorMessage from '@/components/common/ErrorMessage.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
+import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import PageHero from '@/components/common/PageHero.vue'
+import SectionLabel from '@/components/common/SectionLabel.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import AmbiguityTypeBadge from '@/components/common/AmbiguityTypeBadge.vue'
 import { resolveAmbiguityTypeLabel } from '@/components/common/ambiguityLabels.js'
 import { useApiError } from '@/composables/useApiError'
 
@@ -26,6 +31,22 @@ const TABS = [
 ]
 
 const activeTab = ref('customer')
+
+/**
+ * 좌우 화살표로 탭을 옮긴다. 끝에서 다음을 누르면 처음으로 돌아온다 — 탭이 둘뿐이라
+ * 되감기가 없으면 끝 탭에서 화살표가 먹통이 된 것처럼 느껴진다.
+ * 옮긴 탭에 초점도 함께 옮겨야 다음 화살표가 이어서 먹는다.
+ */
+function onTabKey(event) {
+  const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
+  if (step === 0) return
+  event.preventDefault()
+  const at = TABS.findIndex((t) => t.key === activeTab.value)
+  const next = TABS[(at + step + TABS.length) % TABS.length]
+  activeTab.value = next.key
+  const buttons = event.currentTarget.querySelectorAll('[role="tab"]')
+  buttons[TABS.indexOf(next)]?.focus()
+}
 const loading = ref(true)
 const preview = ref(null)
 
@@ -52,8 +73,41 @@ const customerEmptyNote = computed(() => {
   return '지금 고객에게 물을 질문이 없습니다. 분석이 진행 중이거나 수정안 검토를 기다리는 중일 수 있습니다.'
 })
 
+/**
+ * 조회 시각. 응답은 `2026-09-03T20:29:56.911Z` 같은 ISO 문자열인데, 그대로 찍으면
+ * 사용자가 읽을 형식이 아닌 데다 UTC라 시계와 한 시간이 아니라 아홉 시간 어긋난다.
+ * 브라우저의 시간대로 옮겨 분까지만 적는다 — 초는 이 화면에서 쓸 일이 없다.
+ */
+function formatMoment(iso) {
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return iso
+  const p = (n) => String(n).padStart(2, '0')
+  return `${at.getFullYear()}-${p(at.getMonth() + 1)}-${p(at.getDate())} ${p(at.getHours())}:${p(at.getMinutes())}`
+}
+
 /** basis는 조회 시점의 버전 스냅샷이다. 어느 버전을 보고 있는지 화면에 남긴다 (Spec 6.4). */
 const basis = computed(() => preview.value?.basis ?? [])
+
+/**
+ * basis는 요구사항을 저장번호로만 가리킨다. 화면 위쪽 카드들은 전부 문서 내 순번(`#3`)으로
+ * 부르는데 여기만 `요구사항 10`이라 적으면, 같은 것을 두 이름으로 부르게 된다.
+ * 이미 받아 둔 목록에서 순번을 찾아 같은 이름으로 맞춘다.
+ */
+const sequenceById = computed(() => {
+  const p = preview.value
+  if (!p) return new Map()
+  const lists = [p.requirements, p.confirmedRequirements, p.unconfirmedRequirements]
+  const map = new Map()
+  for (const list of lists) {
+    for (const item of list ?? []) map.set(item.requirementId, item.sequenceNo)
+  }
+  return map
+})
+
+/** 순번을 못 찾으면 저장번호를 대신 쓰지 않는다 — 뜻이 다른 수를 같은 자리에 넣는 셈이다. */
+function sequenceOf(requirementId) {
+  return sequenceById.value.get(requirementId) ?? '-'
+}
 
 /**
  * 늦게 도착한 응답을 버리기 위한 세대 번호.
@@ -63,6 +117,20 @@ const basis = computed(() => preview.value?.basis ?? [])
  * 그 상태에서 템플릿이 `confirmedRequirements.length`를 읽으면 화면이 깨진다.
  * 요청할 때 세대를 올려 두고, 돌아왔을 때 세대가 바뀌었으면 결과를 버린다.
  */
+/** 히어로에 얹는 요약. summary 응답을 그대로 옮긴 것이라 계산이 없다. */
+const chips = computed(() => {
+  const s = summary.value
+  if (!s) {
+    return []
+  }
+  return [
+    { value: String(s.totalRequirements), label: '요구사항' },
+    { value: String(s.confirmedRequirements), label: '확정' },
+    { value: String(s.openIssueCount), label: '미해결 문제' },
+    { value: String(s.waitingQuestionCount), label: '답변 대기' },
+  ]
+})
+
 let loadGeneration = 0
 
 async function load() {
@@ -107,414 +175,264 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="pv-page">
-    <header class="pv-header">
-      <h1>{{ preview?.documentTitle ?? 'Preview' }}</h1>
-      <p class="pv-meta">
-        문서 #{{ documentId }}
-        <template v-if="preview"> · 조회 시점 {{ preview.generatedAt }}</template>
-      </p>
-    </header>
-
-    <div class="tabs" role="tablist">
-      <button
-        v-for="tab in TABS"
-        :key="tab.key"
-        type="button"
-        role="tab"
-        class="tab"
-        :class="{ 'tab--on': activeTab === tab.key }"
-        :aria-selected="activeTab === tab.key"
-        @click="activeTab = tab.key"
-      >
-        {{ tab.label }}
-      </button>
-    </div>
+  <div class="page">
+    <PageHero
+      num="05"
+      :eyebrow="isCustomer ? '고객 질문서' : '개발팀용'"
+      watermark="P"
+      :chips="chips"
+    >
+      <template #title>문서 미리보기</template>
+      <template #subject>{{ preview?.documentTitle ?? '문서 #' + documentId }}</template>
+      <template #actions>
+        <!-- 탭은 좌우 화살표로 옮겨간다. 탭 하나만 tab 순서에 넣고(tabindex) 나머지는
+             화살표로 닿게 하는 것이 tablist의 규칙이다 — 그러지 않으면 키보드로 화면을
+             넘길 때 탭 두 개를 모두 지나야 본문에 닿는다. -->
+        <div class="tabs" role="tablist" @keydown="onTabKey">
+          <button
+            v-for="tab in TABS" :key="tab.key" type="button" role="tab"
+            class="tab" :class="{ 'tab--on': activeTab === tab.key }"
+            :aria-selected="activeTab === tab.key"
+            :tabindex="activeTab === tab.key ? 0 : -1"
+            @click="activeTab = tab.key"
+          >{{ tab.label }}</button>
+        </div>
+      </template>
+    </PageHero>
 
     <ErrorMessage v-if="hasError" :message="message" :field-errors="fieldErrors" />
 
-    <p v-if="loading">불러오는 중…</p>
+    <LoadingSpinner v-if="loading" />
 
-    <template v-else-if="preview">
-      <section v-if="summary" class="panel">
-        <h2>요약</h2>
-        <dl class="summary">
-          <div><dt>요구사항</dt><dd>{{ summary.totalRequirements }}</dd></div>
-          <div><dt>확정</dt><dd>{{ summary.confirmedRequirements }}</dd></div>
-          <div><dt>미해결 문제</dt><dd>{{ summary.openIssueCount }}</dd></div>
-          <div><dt>답변 대기</dt><dd>{{ summary.waitingQuestionCount }}</dd></div>
-        </dl>
-      </section>
+    <div v-else-if="preview" class="grid12">
+      <div class="main" data-reveal>
+        <!-- 고객 질문서 -->
+        <template v-if="isCustomer">
+          <SectionLabel text="지금 답이 필요한 질문" :count="preview.requirements.length" />
 
-      <!-- 고객 질문서 -->
-      <section v-if="isCustomer" class="panel">
-        <h2>지금 답이 필요한 질문</h2>
-        <p v-if="preview.requirements.length === 0" class="empty">
-          {{ customerEmptyNote }}
-        </p>
+          <EmptyState
+            v-if="preview.requirements.length === 0"
+            title="지금 물을 질문이 없습니다"
+            :description="customerEmptyNote"
+          />
 
-        <article
-          v-for="item in preview.requirements"
-          :key="item.requirementId"
-          class="req"
-        >
-          <div class="req-head">
-            <span class="req-no">#{{ item.sequenceNo }}</span>
-            <span class="req-version">v{{ item.contentVersion }}</span>
-          </div>
-          <p class="req-text">{{ item.originalText }}</p>
-
-          <div v-for="question in item.questions" :key="question.id" class="question">
-            <div class="question-head">
-              <span class="question-type">{{ resolveAmbiguityTypeLabel(question.type) }}</span>
-              <span class="question-round">{{ question.roundNo }}회차</span>
+          <div v-for="item in preview.requirements" :key="item.requirementId" class="card pad item">
+            <div class="cardhead">
+              <span class="eb">#{{ item.sequenceNo }} 요구사항</span>
+              <span class="fig ver">v{{ item.contentVersion }}</span>
             </div>
-            <p class="question-text">{{ question.questionText }}</p>
-            <p class="question-evidence">근거 — {{ question.evidence }}</p>
-          </div>
-        </article>
-      </section>
+            <p class="orig">{{ item.originalText }}</p>
 
-      <!-- 개발팀용 -->
-      <template v-else>
-        <section class="panel">
-          <h2>확정 요구사항</h2>
-          <p v-if="preview.confirmedRequirements.length === 0" class="empty">
-            아직 확정된 요구사항이 없습니다.
-          </p>
-
-          <article
-            v-for="item in preview.confirmedRequirements"
-            :key="item.requirementId"
-            class="req"
-          >
-            <div class="req-head">
-              <span class="req-no">#{{ item.sequenceNo }}</span>
-              <StatusBadge kind="revision" :value="item.approvedRevision.status" />
-              <span class="req-version">v{{ item.contentVersion }}</span>
-            </div>
-
-            <p class="label">확정본</p>
-            <pre class="content content--confirmed">{{ item.approvedRevision.text }}</pre>
-
-            <p class="label">원문</p>
-            <pre class="content">{{ item.originalText }}</pre>
-
-            <p class="label">
-              근거 답변 · {{ item.approvedRevision.revisionNo }}차 수정안의
-              basedOnClarificationIds
-            </p>
-            <div v-for="answer in item.evidenceAnswers" :key="answer.id" class="evidence">
-              <div class="evidence-head">
-                <span class="question-round">{{ answer.roundNo }}회차</span>
-                <StatusBadge kind="clarification" :value="answer.status" />
-                <span class="evidence-id">질문 #{{ answer.id }}</span>
+            <div v-for="q in item.questions" :key="q.id" class="qrow">
+              <div class="qhead">
+                <AmbiguityTypeBadge :type="q.type" />
+                <span class="eb sm">{{ q.roundNo }}회차</span>
+                <!-- 601 같은 저장번호를 「질문 601」로 적으면 601번째 질문으로 읽힌다.
+                     회차는 왼쪽에 이미 있으니 여기서는 무엇인지만 말한다. -->
+                <span class="mi qid">확인 질문</span>
               </div>
-              <p class="question-text">{{ answer.questionText }}</p>
-              <p class="answer-text">{{ answer.answerText }}</p>
+              <p class="question">{{ q.questionText }}</p>
+              <p class="mi evidence">근거 — {{ q.evidence }}</p>
             </div>
-          </article>
-        </section>
+          </div>
+        </template>
 
-        <section class="panel">
-          <h2>미확정 요구사항</h2>
-          <p v-if="preview.unconfirmedRequirements.length === 0" class="empty">
+        <!-- 개발팀용 -->
+        <template v-else>
+          <SectionLabel text="확정 요구사항" :count="preview.confirmedRequirements.length" />
+
+          <EmptyState
+            v-if="preview.confirmedRequirements.length === 0"
+            title="아직 확정된 요구사항이 없습니다"
+            description="모든 문제가 해결되고 수정안이 승인되면 여기에 쌓입니다."
+          />
+
+          <div v-for="item in preview.confirmedRequirements" :key="item.requirementId" class="card pad item">
+            <div class="cardhead">
+              <span class="eb">#{{ item.sequenceNo }} 요구사항</span>
+              <StatusBadge kind="revision" :value="item.approvedRevision.status" />
+            </div>
+
+            <p class="final">{{ item.approvedRevision.text }}</p>
+
+            <div class="eb sm mt">원문</div>
+            <p class="orig">{{ item.originalText }}</p>
+
+            <div class="eb sm mt">
+              근거 답변 · {{ item.approvedRevision.revisionNo }}차 수정안
+            </div>
+            <div v-for="a in item.evidenceAnswers" :key="a.id" class="qrow">
+              <div class="qhead">
+                <span class="eb sm">{{ a.roundNo }}회차</span>
+                <StatusBadge kind="clarification" :value="a.status" />
+                <span class="mi qid">확인 질문</span>
+              </div>
+              <p class="question">{{ a.questionText }}</p>
+              <p class="answer">{{ a.answerText }}</p>
+            </div>
+          </div>
+
+          <SectionLabel
+            class="mt-lg" text="미확정 요구사항"
+            :count="preview.unconfirmedRequirements.length"
+          />
+
+          <p v-if="preview.unconfirmedRequirements.length === 0" class="mi none">
             미확정 요구사항이 없습니다.
           </p>
 
-          <article
-            v-for="item in preview.unconfirmedRequirements"
-            :key="item.requirementId"
-            class="req"
-          >
-            <div class="req-head">
-              <span class="req-no">#{{ item.sequenceNo }}</span>
-              <StatusBadge kind="requirement" :value="item.status" />
-              <span class="req-version">v{{ item.contentVersion }}</span>
+          <div v-for="item in preview.unconfirmedRequirements" :key="item.requirementId" class="card pad item">
+            <!-- 상태와 버전은 한 묶음으로 오른쪽에 세운다. 셋을 그냥 나열하면
+                 space-between이 가운데 것(상태)을 카드 한복판에 떨어뜨려 놓아,
+                 제목에도 버전에도 붙지 않은 채 홀로 뜬다
+                 (프론트엔드-추가-요청사항 5.1). -->
+            <div class="cardhead">
+              <span class="eb">#{{ item.sequenceNo }} 요구사항</span>
+              <span class="headmeta">
+                <StatusBadge kind="requirement" :value="item.status" />
+                <span class="fig ver">v{{ item.contentVersion }}</span>
+              </span>
             </div>
-            <p class="req-text">{{ item.originalText }}</p>
+            <p class="orig">{{ item.originalText }}</p>
 
-            <p class="label">문제 이력</p>
-            <div v-for="issue in item.issues" :key="issue.id" class="issue-row">
-              <span class="question-type">{{ resolveAmbiguityTypeLabel(issue.type) }}</span>
+            <div class="eb sm mt">문제 이력</div>
+            <div v-for="(issue, i) in item.issues" :key="issue.id" class="irow">
+              <AmbiguityTypeBadge :type="issue.type" />
               <StatusBadge kind="issue" :value="issue.status" />
-              <span class="evidence-id">#{{ issue.id }}</span>
-              <span class="issue-evidence">{{ issue.evidence }}</span>
+              <span class="mi qid">#{{ i + 1 }}</span>
+              <span class="mi evidence full">{{ issue.evidence }}</span>
             </div>
 
-            <p class="label">질문·답변 이력</p>
-            <div v-for="question in item.questions" :key="question.id" class="evidence">
-              <div class="evidence-head">
-                <span class="question-round">{{ question.roundNo }}회차</span>
-                <StatusBadge kind="clarification" :value="question.status" />
-                <span class="evidence-id">질문 #{{ question.id }}</span>
+            <div class="eb sm mt">질문·답변 이력</div>
+            <div v-for="q in item.questions" :key="q.id" class="qrow">
+              <div class="qhead">
+                <span class="eb sm">{{ q.roundNo }}회차</span>
+                <StatusBadge kind="clarification" :value="q.status" />
+                <span class="mi qid">확인 질문</span>
               </div>
-              <p class="question-text">{{ question.questionText }}</p>
-              <p v-if="question.answerText" class="answer-text">{{ question.answerText }}</p>
-              <p v-else class="empty">아직 답변이 없습니다.</p>
+              <p class="question">{{ q.questionText }}</p>
+              <p v-if="q.answerText" class="answer">{{ q.answerText }}</p>
+              <p v-else class="mi none">아직 답변이 없습니다.</p>
             </div>
-          </article>
-        </section>
-      </template>
+          </div>
+        </template>
+      </div>
 
-      <section class="panel">
-        <h2>조회 기준 버전</h2>
-        <p class="hint">
-          이 Preview는 아래 버전으로 조합했습니다. 이후 답변·검토가 있었다면 다시 조회해야
-          합니다.
-        </p>
-        <ul class="basis">
-          <li v-for="row in basis" :key="row.requirementId">
-            요구사항 #{{ row.requirementId }} · v{{ row.contentVersion }}
-            <template v-if="row.approvedRevisionId">
-              · 승인 수정안 #{{ row.approvedRevisionId }}
-            </template>
-          </li>
-        </ul>
-      </section>
-    </template>
-  </section>
+      <aside class="aside stickycol" data-reveal>
+        <!-- 왼쪽 기둥이 SectionLabel 아래에서 카드를 시작하므로 오른쪽도 같은 자리에서
+             시작해야 두 기둥의 윗변이 맞는다. 라벨을 카드 머리말로 넣으면 33px 어긋난다. -->
+        <SectionLabel text="조회 기준 버전" />
+        <div class="card pad quiet">
+          <p class="mi note">이후 답변·검토가 있었다면 다시 조회해야 합니다.</p>
+          <div v-for="row in basis" :key="row.requirementId" class="brow">
+            <span class="mi blabel">요구사항 #{{ sequenceOf(row.requirementId) }}</span>
+            <span class="fig bver">v{{ row.contentVersion }}</span>
+            <span v-if="row.approvedRevisionId" class="mi bapp">승인된 수정안</span>
+          </div>
+          <p v-if="preview.generatedAt" class="mi gen">조회 시점 {{ formatMoment(preview.generatedAt) }}</p>
+        </div>
+      </aside>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.pv-page {
-  max-width: 880px;
-  margin: 0 auto;
-  padding: 24px 20px 48px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+/* 카드 머리말의 오른쪽 정보 묶음. 상태와 버전은 같은 것을 말하므로 붙여 둔다. */
+.headmeta { display: inline-flex; align-items: center; gap: 10px; }
+/* 본문 8 : 근거 4. 오른쪽이 이미 카드라 세로 괘선은 쓰지 않는다. */
+.main { grid-column: span 8; }
+.aside { grid-column: span 4; }
+
+@media (max-width: 900px) {
+  .main, .aside { grid-column: span 12; position: static; }
 }
 
-.pv-header h1 {
-  margin: 0 0 6px;
-  font-size: 1.5rem;
-  word-break: keep-all;
-}
-
-.pv-meta {
-  margin: 0;
-  color: #64748b;
-  font-size: 0.875rem;
-}
-
+/* 히어로 액션 자리에 놓는 탭. 두 벌의 같은 내용을 다른 독자에게 보여주는 전환이다. */
 .tabs {
   display: inline-flex;
-  gap: 4px;
+  gap: 3px;
   padding: 4px;
-  border-radius: 10px;
-  background: #f1f5f9;
-  align-self: flex-start;
+  border-radius: 999px;
+  background: var(--bg-200);
 }
 
 .tab {
-  padding: 8px 18px;
-  border: none;
-  border-radius: 8px;
+  padding: 7px 17px 8px;
+  border: 0;
+  border-radius: 999px;
   background: transparent;
-  color: #475569;
+  color: var(--fg-500);
   font: inherit;
-  font-size: 0.875rem;
+  font-size: var(--fs-micro);
   font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
+  transition: background-color .25s var(--ease), color .25s var(--ease);
 }
 
-.tab--on {
-  background: #ffffff;
-  color: #1d4ed8;
-  box-shadow: 0 1px 2px rgb(15 23 42 / 0.08);
-}
+.tab--on { background: var(--bg-0); color: var(--primary-700); }
 
-.panel {
-  padding: 16px 18px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  background: #ffffff;
-}
+.item { margin-bottom: 18px; }
+.mt { margin-top: 18px; display: block; }
+.mt-lg { margin-top: 34px; }
+.ver { font-size: var(--fs-sm); color: var(--fg-600); }
+.eb.sm { font-size: var(--fs-micro); }
 
-.panel h2 {
-  margin: 0 0 12px;
-  font-size: 1rem;
-}
+.orig { margin: 0; font-size: var(--fs-sm); line-height: 1.85; color: var(--fg-700); word-break: keep-all; }
 
-.summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 12px;
+/* 확정본은 이 화면의 결론이라 본문보다 한 단 크고 진하게 둔다. */
+.final {
   margin: 0;
-}
-
-.summary div {
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: #f8fafc;
-}
-
-.summary dt {
-  color: #64748b;
-  font-size: 0.75rem;
-}
-
-.summary dd {
-  margin: 4px 0 0;
-  font-size: 1.25rem;
-  font-weight: 700;
-}
-
-.req {
-  padding: 14px 0;
-  border-top: 1px solid #f1f5f9;
-}
-
-.req:first-of-type {
-  border-top: 0;
-  padding-top: 0;
-}
-
-.req-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
-}
-
-.req-no {
-  font-weight: 700;
-  color: #1d4ed8;
-}
-
-.req-version {
-  color: #94a3b8;
-  font-size: 0.8125rem;
-}
-
-.req-text {
-  margin: 0;
-  font-size: 0.9375rem;
-  line-height: 1.7;
-  word-break: keep-all;
-}
-
-.label {
-  margin: 14px 0 6px;
-  color: #64748b;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.content {
-  margin: 0;
-  padding: 12px 14px;
-  border-radius: 8px;
-  background: #f8fafc;
-  font-family: inherit;
-  font-size: 0.9375rem;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  word-break: keep-all;
-}
-
-.content--confirmed {
-  border: 1px solid #86efac;
-  background: #f0fdf4;
-}
-
-.question,
-.evidence {
-  margin-top: 10px;
-  padding: 10px 0 0 12px;
-  border-left: 2px solid #e2e8f0;
-}
-
-.question-head,
-.evidence-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.question-type {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #b45309;
-}
-
-.question-round {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #475569;
-}
-
-.question-text {
-  margin: 6px 0 0;
-  font-size: 0.9375rem;
-  line-height: 1.6;
-  word-break: keep-all;
-}
-
-.question-evidence {
-  margin: 6px 0 0;
-  color: #64748b;
-  font-size: 0.8125rem;
-  line-height: 1.6;
-  word-break: keep-all;
-}
-
-.answer-text {
-  margin: 8px 0 0;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: #f1f5f9;
-  font-size: 0.875rem;
-  line-height: 1.6;
-  word-break: keep-all;
-}
-
-.evidence-id,
-.issue-evidence {
-  color: #94a3b8;
-  font-size: 0.8125rem;
-}
-
-.issue-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 8px 0;
-  border-bottom: 1px solid #f8fafc;
-}
-
-.issue-evidence {
-  flex: 1 1 100%;
-  color: #64748b;
-  line-height: 1.6;
-  word-break: keep-all;
-}
-
-.basis {
-  margin: 0;
-  padding-left: 18px;
-  color: #475569;
-  font-size: 0.875rem;
+  padding: 15px 17px;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--green-bd);
+  background: color-mix(in srgb, var(--green-bg) 45%, var(--bg-0));
+  font-size: var(--fs-lead);
   line-height: 1.8;
-}
-
-.hint {
-  margin: 0 0 8px;
-  color: #64748b;
-  font-size: 0.8125rem;
-  line-height: 1.6;
+  color: var(--fg-950);
   word-break: keep-all;
 }
 
-.empty {
+.qrow { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--rule); }
+.qhead { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-bottom: 8px; }
+.qid { font-size: var(--fs-nano); color: var(--fg-400); }
+/* 이 화면에서 사람이 읽고 답해야 하는 문장이다. 본문과 같은 크기·무게로 두면
+   근거·회차 같은 곁글에 묻힌다. 한 단 키우고 굵기를 준다. */
+.question {
   margin: 0;
-  color: #94a3b8;
-  font-size: 0.875rem;
-  line-height: 1.6;
+  font-size: var(--fs-lead); font-weight: 650; line-height: 1.7;
+  color: var(--fg-950); word-break: keep-all;
+}
+.evidence { margin: 7px 0 0; font-size: var(--fs-micro); color: var(--fg-500); line-height: 1.7; word-break: keep-all; }
+.evidence.full { flex: 1 1 100%; margin: 0; }
+
+.answer {
+  margin: 9px 0 0;
+  padding: 11px 14px;
+  border-radius: var(--radius-card);
+  background: var(--bg-100);
+  border: 1px solid var(--bg-200);
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+  color: var(--fg-700);
   word-break: keep-all;
 }
+
+.irow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.none { font-size: var(--fs-sm); color: var(--fg-400); margin: 8px 0 0; }
+
+.note { font-size: var(--fs-micro); color: var(--fg-500); line-height: 1.7; margin: 0 0 14px; word-break: keep-all; }
+.brow { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; padding: 9px 0; border-bottom: 1px solid var(--rule); }
+.blabel { font-size: var(--fs-micro); color: var(--fg-700); }
+.bver { font-size: var(--fs-sm); color: var(--fg-950); }
+.bapp { font-size: var(--fs-nano); color: var(--accent-700); }
+.gen { margin: 12px 0 0; font-size: var(--fs-nano); color: var(--fg-400); }
 </style>
