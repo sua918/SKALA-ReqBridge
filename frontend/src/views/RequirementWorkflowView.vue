@@ -25,7 +25,6 @@ import { isContentVersionConflict } from '@/api/client'
 import AnalysisFailureBanner from '@/components/common/AnalysisFailureBanner.vue'
 import ErrorMessage from '@/components/common/ErrorMessage.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
-import KeyValueRows from '@/components/common/KeyValueRows.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import PageHero from '@/components/common/PageHero.vue'
 import PillButton from '@/components/common/PillButton.vue'
@@ -159,14 +158,6 @@ const chips = computed(() => [
   { value: String(workflow.value?.revisions.length ?? 0), label: '수정안' },
 ])
 
-/** 참조 열의 메타 표. 값은 전부 이미 받아 둔 응답에서 꺼낸다. */
-const metaRows = computed(() => [
-  //저장번호(요구사항 401·문서 1·작업 #7)를 걷어냈다. 사용자가 그 수로 할 수 있는 일이
-  //없고, 순번과 나란히 놓이면 어느 쪽이 「이 문서의 몇 번째」인지 알 수 없다.
-  { label: '문서 내 순번', value: `#${requirement.value?.sequenceNo ?? '-'}` },
-  { label: '버전', value: contentVersion.value === null ? '-' : `v${contentVersion.value}` },
-  { label: '진행 중 분석', value: activeAnalysis.value ? '있음' : '없음' },
-])
 
 function clarificationLabel(clarification) {
   return clarification.roundNo + '회차'
@@ -405,7 +396,6 @@ onMounted(() => {
           <ClarityJourney v-if="status" :status="status" />
         </div>
 
-        <KeyValueRows label="이 요구사항" :rows="metaRows" label-width="106px" class="quiet" />
       </div>
 
       <!-- 작업 열 -->
