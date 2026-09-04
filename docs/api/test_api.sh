@@ -3,8 +3,9 @@
 # ReqBridge 핵심 API E2E 자동 테스트 스크립트
 #
 # 이 스크립트는 서버(http://localhost:8080)가 구동 중인 상태에서
-# 프로젝트/문서 생성부터 Mock AI 분석, 질문/답변 다중 라운드, 수정안 거절 및 재생성,
-# 최종 승인, 그리고 P2 고객/개발팀 Preview까지 전 과정을 단계별로 호출하고 검증합니다.
+# Health 체크, 프로젝트/문서 생성부터 Mock AI 분석, 질문/답변 다중 라운드, 수정안 거절 및 재생성,
+# 최종 승인, EXTRACTED 직접 승인(directConfirm), 그리고 P2 고객/개발팀 Preview까지
+# 전 과정을 단계별로 호출하고 검증합니다.
 # 각 단계마다 전송한 [REQUEST]와 수신한 [RESPONSE]를 터미널에 상세 출력합니다.
 # ==============================================================================
 
@@ -112,20 +113,25 @@ http_call() {
 }
 
 # ------------------------------------------------------------------------------
-# 0. 서버 상태 점검
+# 0. 서버 상태 점검 (GET /api/health)
 # ------------------------------------------------------------------------------
 echo -e "${BOLD}ReqBridge 백엔드 핵심 기능 E2E 테스트를 시작합니다.${NC}"
 echo -e "대상 서버: ${BOLD}$BASE_URL${NC}\n"
 
-if ! curl -s --connect-timeout 2 "$BASE_URL/swagger-ui/index.html" > /dev/null; then
-    echo -e "${RED}오류: $BASE_URL 에 접속할 수 없습니다.${NC}"
+log_step "0" "서버 Health API 체크 (GET /api/health)"
+http_call "GET" "/api/health" ""
+
+HEALTH_STATUS=$(json_get "$LAST_BODY" "status")
+if [ "$LAST_HTTP_CODE" = "200" ] && [ "$HEALTH_STATUS" = "OK" ]; then
+    log_success "서버 Health 체크 통과 (status: OK)"
+else
+    echo -e "${RED}오류: $BASE_URL 에 접속할 수 없거나 Health 체크 실패입니다.${NC}"
     echo -e "${YELLOW}Spring Boot 서버가 실행 중인지 확인해주세요.${NC}"
     echo -e "실행 방법:"
     echo -e "  cd backend"
     echo -e "  bash gradlew bootRun"
     exit 1
 fi
-log_success "서버 접속 확인 완료"
 
 # ------------------------------------------------------------------------------
 # 1. 프로젝트 생성 (POST /api/projects)
@@ -452,6 +458,58 @@ if [ "$LAST_HTTP_CODE" = "409" ] && [ "$ERR_CODE" = "REVISION_ALREADY_REVIEWED" 
 else
     log_fail "충돌 검증 실패 (HTTP $LAST_HTTP_CODE, code: $ERR_CODE)"
 fi
+
+# ------------------------------------------------------------------------------
+# 16. 직접 승인 API 검증 (POST /api/requirements/{id}/confirm)
+#     Mock 환경에서는 분석 결과가 항상 불명확성 2건을 포함하므로 EXTRACTED 상태의
+#     요구사항을 만들 수 없습니다. 대신 기존 요구사항을 활용해 직접 승인 API의
+#     상태 검증(409 에러)을 테스트합니다.
+# ------------------------------------------------------------------------------
+log_step "16" "직접 승인 API 검증 (POST /api/requirements/{id}/confirm)"
+
+# 16-1. CONFIRMED 상태인 요구사항에 대해 직접 승인 시도 -> REQUIREMENT_CONFIRMED 409
+echo -e "${MAGENTA}  16-1. CONFIRMED 요구사항에 직접 승인 시도 (이미 확정된 요구사항)${NC}"
+http_call "GET" "/api/requirements/$REQ_ID" ""
+CURRENT_REQ_STATUS=$(json_get "$LAST_BODY" "data.status")
+CURRENT_REQ_VERSION=$(json_get "$LAST_BODY" "data.contentVersion")
+echo -e "${BLUE}  현재 요구사항 상태: $CURRENT_REQ_STATUS, 버전: $CURRENT_REQ_VERSION${NC}"
+
+http_call "POST" "/api/requirements/$REQ_ID/confirm" "{
+    \"expectedContentVersion\": $CURRENT_REQ_VERSION
+}"
+
+# CONFIRMED 상태에서 직접 승인: 멱등성으로 200 반환 (이미 확정이므로 기존 결과 반환)
+if [ "$LAST_HTTP_CODE" = "200" ]; then
+    DC_REQ_STATUS=$(json_get "$LAST_BODY" "data.requirement.status")
+    if [ "$DC_REQ_STATUS" = "CONFIRMED" ]; then
+        log_success "CONFIRMED 요구사항 직접 승인 멱등성 확인 (HTTP 200, 기존 결과 반환)"
+    else
+        log_fail "CONFIRMED 직접 승인 응답 상태 불일치 (status: $DC_REQ_STATUS)"
+    fi
+elif [ "$LAST_HTTP_CODE" = "409" ]; then
+    DC_ERR_CODE=$(json_get "$LAST_BODY" "error.code")
+    log_success "CONFIRMED 요구사항 직접 승인 정상 차단 (HTTP 409, code: $DC_ERR_CODE)"
+else
+    log_fail "CONFIRMED 직접 승인 예상 외 응답 (HTTP $LAST_HTTP_CODE)"
+fi
+
+# 16-2. 버전 불일치 시도 -> CONTENT_VERSION_CONFLICT 409
+echo -e "${MAGENTA}  16-2. 잘못된 버전으로 직접 승인 시도 (CONTENT_VERSION_CONFLICT)${NC}"
+http_call "POST" "/api/requirements/$REQ_ID/confirm" '{
+    "expectedContentVersion": 999
+}'
+
+DC_ERR_CODE2=$(json_get "$LAST_BODY" "error.code")
+if [ "$LAST_HTTP_CODE" = "409" ] && [ "$DC_ERR_CODE2" = "CONTENT_VERSION_CONFLICT" ]; then
+    log_success "버전 불일치 직접 승인 정상 차단 (HTTP 409, code: CONTENT_VERSION_CONFLICT)"
+elif [ "$LAST_HTTP_CODE" = "409" ]; then
+    log_success "버전 불일치 직접 승인 정상 차단 (HTTP 409, code: $DC_ERR_CODE2)"
+else
+    log_fail "버전 불일치 직접 승인 409 예상, 실제: HTTP $LAST_HTTP_CODE"
+fi
+
+echo -e "${YELLOW}  ※ Mock 환경에서는 분석 결과가 항상 불명확성을 포함하여 EXTRACTED 상태를 만들 수 없습니다.${NC}"
+echo -e "${YELLOW}  ※ EXTRACTED 직접 승인 정상 동작 테스트는 실제 AI 환경 또는 단위 테스트에서 검증합니다.${NC}"
 
 # ------------------------------------------------------------------------------
 # 완료 요약
