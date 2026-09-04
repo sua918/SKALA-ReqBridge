@@ -919,7 +919,7 @@ EXTRACTED가 아닌 상태, 미해결 문제/대기 질문 존재, 활성 분석
 
 `GET /api/documents/{documentId}/previews/customer` · 신형섭 · P2
 
-P2 구현. 현재 OPEN 문제의 WAITING 질문만 제공한다. 질문 없는 요구사항은 requirements에서 제외한다. basis는 모든 요구사항의 읽기 버전. summary는 해당 문서 전체 기준이다. REPEATABLE_READ로 동일 스냅샷에서 조합한다.
+P2 구현. 현재 OPEN 문제의 WAITING 질문만 제공한다. 질문 없는 요구사항은 requirements에서 제외한다. basis는 고객 질문 여부와 관계없이 모든 요구사항의 문서 내 순번과 읽기 버전을 제공한다. summary는 해당 문서 전체 기준이다. REPEATABLE_READ로 동일 스냅샷에서 조합한다.
 
 요청 본문: 없음.
 
@@ -940,6 +940,7 @@ P2 구현. 현재 OPEN 문제의 WAITING 질문만 제공한다. 질문 없는 �
     "basis": [
       {
         "requirementId": 401,
+        "sequenceNo": 1,
         "contentVersion": 1,
         "approvedRevisionId": null
       }
@@ -978,7 +979,7 @@ P2 구현. 현재 OPEN 문제의 WAITING 질문만 제공한다. 질문 없는 �
 
 `GET /api/documents/{documentId}/previews/developer` · 신형섭 · P2
 
-P2 구현. 승인된 수정안과 근거 답변만 확정 목록에 포함한다. 미확정 요구사항은 별도 배열이다. issues는 해당 요구사항의 모든 Issue 이력(ID 오름차순), questions는 모든 Clarification 이력(issueId → roundNo 오름차순)이다. 각 요구사항 배열은 sequenceNo 오름차순. basis는 모든 요구사항. REPEATABLE_READ 조회 및 approvedRevisionId/본문 일치 검증. 파일 다운로드와 AI 재생성 없음.
+P2 구현. 승인된 수정안과 근거 답변만 확정 목록에 포함한다. 미확정 요구사항은 별도 배열이다. issues는 해당 요구사항의 모든 Issue 이력(ID 오름차순), questions는 모든 Clarification 이력(issueId → roundNo 오름차순)이다. 각 요구사항 배열은 sequenceNo 오름차순. basis는 모든 요구사항의 문서 내 순번과 읽기 버전을 제공한다. REPEATABLE_READ 조회 및 approvedRevisionId/본문 일치 검증. 파일 다운로드와 AI 재생성 없음.
 
 요청 본문: 없음.
 
@@ -999,6 +1000,7 @@ P2 구현. 승인된 수정안과 근거 답변만 확정 목록에 포함한다
     "basis": [
       {
         "requirementId": 401,
+        "sequenceNo": 1,
         "contentVersion": 4,
         "approvedRevisionId": 701
       }
@@ -1105,7 +1107,7 @@ P2 구현. 승인된 수정안과 근거 답변만 확정 목록에 포함한다
 
 ### 6.4 Preview의 버전 일관성
 
-Report는 기존 CoreRequirementPort와 WorkflowPreviewPort를 사용한다. 같은 read-only REPEATABLE_READ 트랜잭션에서 원문·요구사항·질문·승인 수정안을 읽는다. `basis`는 조회 당시 모든 요구사항의 contentVersion/approvedRevisionId이다. 승인된 본문은 Requirement.confirmedText 및 approvedRevisionId에 해당하는 Revision.text와 같아야 한다. Preview의 approvedRevision은 기존 ApprovedRevisionSnapshot과 RequirementSnapshot을 조합한다. requirementId는 소속 요구사항, status는 APPROVED, rejectionReason은 null, inputContentVersion은 승인 시 일치가 검증된 contentVersion으로 채운다. 불일치하면 409 PREVIEW_VERSION_CONFLICT이며 서로 다른 버전을 혼합하지 않는다.
+Report는 기존 CoreRequirementPort와 WorkflowPreviewPort를 사용한다. 같은 read-only REPEATABLE_READ 트랜잭션에서 원문·요구사항·질문·승인 수정안을 읽는다. `basis`는 조회 당시 모든 요구사항의 sequenceNo/contentVersion/approvedRevisionId이며 sequenceNo 오름차순을 유지한다. 승인된 본문은 Requirement.confirmedText 및 approvedRevisionId에 해당하는 Revision.text와 같아야 한다. Preview의 approvedRevision은 기존 ApprovedRevisionSnapshot과 RequirementSnapshot을 조합한다. requirementId는 소속 요구사항, status는 APPROVED, rejectionReason은 null, inputContentVersion은 승인 시 일치가 검증된 contentVersion으로 채운다. 불일치하면 409 PREVIEW_VERSION_CONFLICT이며 서로 다른 버전을 혼합하지 않는다.
 
 PreviewSummary는 기존 Core/Workflow Port에서 읽은 요구사항·문제·질문으로 계산한다. 분석 진행/실패 여부는 프론트가 분석 이력 API에서 따로 표시한다. 한형준이 Workflow Repository를 직접 조회하는 구현은 추가하지 않는다.
 
@@ -1477,6 +1479,7 @@ contentVersion은 현재 요구사항 버전. analysis.inputContentVersion은 �
 | 필드 | 타입 | 필수 | null | 조건·의미 |
 | --- | --- | --- | --- | --- |
 | `requirementId` | integer | 필수 | 불가 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
+| `sequenceNo` | integer | 필수 | 불가 | 문서 내 요구사항 순번. `basis`는 이 값의 오름차순을 유지한다. |
 | `contentVersion` | integer | 필수 | 불가 | 수정안 생성 당시 불변 버전. 예: v4 수정안을 거절해 요구사항이 v5가 되어도 기존 수정안은 4 유지. |
 | `approvedRevisionId` | integer | 필수 | 허용 | DB에서 생성한 양수 ID. JSON number; 본 명세는 JavaScript 안전 정수 범위로 제한한다. |
 
@@ -1560,6 +1563,8 @@ confirmedRequirements에는 APPROVED 수정안만 포함. evidenceAnswers는 해
 ## 11. 개정 내역과 검증 기준
 
 0.5.0은 백엔드 코드 기준 분석을 통해 다음을 반영했다.
+
+- PreviewBasis에 `sequenceNo`를 추가해 고객 질문 포함 여부와 관계없이 고객용·개발팀용 Preview의 모든 basis 항목이 문서 내 요구사항 순번을 제공한다.
 
 - `GET /api/health` Endpoint 추가: `{ "status": "OK" }`를 반환하며 공통 응답 래퍼를 사용하지 않는다.
 - `POST /api/requirements/{requirementId}/confirm` Endpoint 추가: EXTRACTED 상태의 요구사항을 직접 승인한다. 서버가 원문을 확정본으로 복사하는 MANUAL source 수정안을 자동 생성·승인하고 CONFIRMED로 전환한다.

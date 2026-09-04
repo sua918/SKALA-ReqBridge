@@ -877,6 +877,7 @@ function previewSummary(requirements) {
 function previewBasis(requirements) {
   return requirements.map((r) => ({
     requirementId: r.id,
+    sequenceNo: r.sequenceNo,
     contentVersion: r.contentVersion,
     approvedRevisionId: r.approvedRevisionId,
   }))

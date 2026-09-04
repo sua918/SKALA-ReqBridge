@@ -85,29 +85,8 @@ function formatMoment(iso) {
   return `${at.getFullYear()}-${p(at.getMonth() + 1)}-${p(at.getDate())} ${p(at.getHours())}:${p(at.getMinutes())}`
 }
 
-/** basis는 조회 시점의 버전 스냅샷이다. 어느 버전을 보고 있는지 화면에 남긴다 (Spec 6.4). */
+/** basis는 요구사항 순번을 포함한 조회 시점의 버전 스냅샷이다 (Spec 6.4). */
 const basis = computed(() => preview.value?.basis ?? [])
-
-/**
- * basis는 요구사항을 저장번호로만 가리킨다. 화면 위쪽 카드들은 전부 문서 내 순번(`#3`)으로
- * 부르는데 여기만 `요구사항 10`이라 적으면, 같은 것을 두 이름으로 부르게 된다.
- * 이미 받아 둔 목록에서 순번을 찾아 같은 이름으로 맞춘다.
- */
-const sequenceById = computed(() => {
-  const p = preview.value
-  if (!p) return new Map()
-  const lists = [p.requirements, p.confirmedRequirements, p.unconfirmedRequirements]
-  const map = new Map()
-  for (const list of lists) {
-    for (const item of list ?? []) map.set(item.requirementId, item.sequenceNo)
-  }
-  return map
-})
-
-/** 순번을 못 찾으면 저장번호를 대신 쓰지 않는다 — 뜻이 다른 수를 같은 자리에 넣는 셈이다. */
-function sequenceOf(requirementId) {
-  return sequenceById.value.get(requirementId) ?? '-'
-}
 
 /**
  * 늦게 도착한 응답을 버리기 위한 세대 번호.
@@ -325,7 +304,7 @@ onMounted(() => {
         <div class="card pad quiet">
           <p class="mi note">이후 답변·검토가 있었다면 다시 조회해야 합니다.</p>
           <div v-for="row in basis" :key="row.requirementId" class="brow">
-            <span class="mi blabel">요구사항 #{{ sequenceOf(row.requirementId) }}</span>
+            <span class="mi blabel">요구사항 #{{ row.sequenceNo }}</span>
             <span class="fig bver">v{{ row.contentVersion }}</span>
             <span v-if="row.approvedRevisionId" class="mi bapp">승인된 수정안</span>
           </div>
